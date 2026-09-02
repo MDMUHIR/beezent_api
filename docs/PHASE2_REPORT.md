@@ -118,6 +118,7 @@ database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/beeze
 ```python
 class Base(DeclarativeBase): ...
 
+
 class UUIDPrimaryKeyMixin:
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
 ```

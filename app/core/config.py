@@ -17,6 +17,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/beezents"
 
+    session_cookie_name: str = "beezents_session"
+    session_max_age_seconds: int = 7 * 24 * 60 * 60
+    cookie_secure: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -44,6 +44,58 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/beezents
 The connection string and other settings are managed by Pydantic Settings in
 `app/core/config.py`. Never hardcode credentials.
 
+## Authentication
+
+Authentication is **server-side and session-based**. On login, an opaque random
+token is generated, hashed (SHA-256) and stored in a `user_sessions` row; the raw
+token is sent to the browser as an HTTP-only cookie. Passwords are hashed with
+**Argon2id**; plaintext passwords are never stored, logged, or returned by the
+API.
+
+### Available roles
+
+| Role | Access |
+| --- | --- |
+| `user` | Normal authenticated access (default on registration) |
+| `client` | Reserved for future client accounts |
+| `staff` | Staff-level access (`require_staff`) |
+| `admin` | Full administrative access (`require_admin`) |
+
+A user can **never** choose or change their own role via the API; `role` is
+ignored in registration/profile input. Roles are assigned by administrators.
+
+### Environment variables required
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | — | Async PostgreSQL connection string |
+| `SESSION_COOKIE_NAME` | `beezents_session` | HTTP-only session cookie name |
+| `SESSION_MAX_AGE_SECONDS` | `604800` | Session lifetime (7 days) |
+| `COOKIE_SECURE` | `false` | Set to `true` in production (HTTPS only) |
+
+### Authentication endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/v1/auth/register` | Register a new user (role always `user`) |
+| `POST` | `/api/v1/auth/login` | Log in with email + password, sets session cookie |
+| `POST` | `/api/v1/auth/logout` | Invalidates the session and clears the cookie |
+| `GET` | `/api/v1/auth/me` | Current authenticated user |
+
+Development-only role checks (for testing authorization):
+`GET /api/v1/dev/staff` and `GET /api/v1/dev/admin`.
+
+### Security notes
+
+- Session cookie is `HttpOnly` and `SameSite=lax`; `Secure` is enabled by setting
+  `COOKIE_SECURE=true` (required in production).
+- Logout deletes the server-side session row, so the session is truly invalidated.
+- Unauthenticated requests return `401`; authenticated requests without the
+  required role return `403`.
+- Login failures use a generic `Invalid email or password` message and do not
+  reveal whether an email exists.
+- Argon2id hashing and parameterized SQLAlchemy queries are used throughout.
+
 ## Run the backend
 
 ```sh
@@ -103,9 +155,10 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-The DB health integration test runs against a real PostgreSQL when the
-configured `DATABASE_URL` is reachable and is skipped otherwise. The 503
-(unavailable) path is tested deterministically with an unreachable engine.
+Tests use an **isolated test database** (`beezents_test`, configurable via
+`TEST_DATABASE_URL`). The test database is created and migrated automatically on
+the first test run; authentication tests run against the real authentication
+implementation (Argon2id hashing, real session rows, real cookies).
 
 ## Project structure
 
@@ -117,17 +170,28 @@ app/
 │   └── v1/
 │       ├── __init__.py
 │       ├── router.py
+│       ├── deps.py        # get_current_user, require_staff, require_admin
 │       └── endpoints/
-│           └── health.py   # /health and /health/db
+│           ├── health.py  # /health and /health/db
+│           ├── auth.py    # register / login / logout / me
+│           └── dev.py     # staff/admin role checks (development only)
 ├── core/
 │   ├── __init__.py
-│   ├── config.py      # Pydantic Settings (incl. DATABASE_URL)
+│   ├── config.py      # Pydantic Settings (incl. DATABASE_URL, session config)
 │   ├── database.py    # async engine, session factory, get_session
+│   ├── security.py    # Argon2id hashing, session tokens, cookies
 │   ├── logging.py
 │   └── exceptions.py
-└── models/
+├── models/
+│   ├── __init__.py
+│   ├── base.py        # Declarative Base + UUID primary key mixin
+│   ├── enums.py       # Role enum
+│   ├── user.py        # User model
+│   └── session.py     # UserSession model
+└── schemas/
     ├── __init__.py
-    └── base.py        # Declarative Base + UUID primary key mixin
+    ├── user.py        # UserResponse
+    └── auth.py        # RegisterRequest, LoginRequest
 migrations/            # Alembic migrations
 tests/
 ```
