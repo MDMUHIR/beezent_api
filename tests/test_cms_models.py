@@ -1,31 +1,16 @@
-import asyncio
 from pathlib import Path
-from typing import Any
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.models import CaseStudy, Project, ProjectStatus, Service, Solution
+from tests._db import run_db
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-
-def run_db(coro) -> Any:
-    async def _runner() -> Any:
-        engine = create_async_engine(get_settings().database_url)
-        factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with factory() as session:
-                return await coro(session)
-        finally:
-            await engine.dispose()
-
-    return asyncio.run(_runner())
 
 
 async def _table_names(session: AsyncSession) -> set[str]:

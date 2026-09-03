@@ -1,15 +1,12 @@
 import asyncio
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 from app.core.database import get_session
 from app.main import app
-
-client = TestClient(app)
 
 
 async def _database_reachable() -> bool:
@@ -24,7 +21,7 @@ async def _database_reachable() -> bool:
         await probe_engine.dispose()
 
 
-def test_db_health_when_database_available() -> None:
+def test_db_health_when_database_available(client) -> None:
     if not asyncio.run(_database_reachable()):
         pytest.skip("PostgreSQL is not reachable at the configured DATABASE_URL")
     response = client.get("/api/v1/health/db")
@@ -32,7 +29,7 @@ def test_db_health_when_database_available() -> None:
     assert response.json() == {"status": "healthy"}
 
 
-def test_db_health_when_database_unavailable() -> None:
+def test_db_health_when_database_unavailable(client) -> None:
     broken_engine = create_async_engine(
         "postgresql+asyncpg://postgres:postgres@localhost:1/nope",
         connect_args={"timeout": 2},

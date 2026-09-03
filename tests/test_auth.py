@@ -213,3 +213,68 @@ def test_inactive_user_cannot_login(client) -> None:
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid email or password"
+
+
+def test_register_whitespace_full_name_rejected(client) -> None:
+    payload = {**REGISTER_PAYLOAD, "full_name": "   "}
+    response = client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 422
+
+
+def test_register_full_name_trimmed(client) -> None:
+    payload = {**REGISTER_PAYLOAD, "full_name": "  Alice Example  "}
+    response = client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 201
+    assert response.json()["full_name"] == "Alice Example"
+
+
+def test_register_password_whitespace_only_rejected(client) -> None:
+    payload = {**REGISTER_PAYLOAD, "password": "        "}
+    response = client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 422
+
+
+def test_login_email_normalized_case_insensitive(client) -> None:
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "Mixed.Case@Example.COM",
+            "password": "strong-password",
+            "full_name": "Mixed",
+        },
+    )
+    for email in ("mixed.case@example.com", "  MIXED.CASE@example.com "):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "strong-password"},
+        )
+        assert response.status_code == 200, email
+
+
+def test_logout_without_session_returns_204(client) -> None:
+    response = client.post("/api/v1/auth/logout")
+    assert response.status_code == 204
+
+
+def test_multiple_sessions_all_valid(client) -> None:
+    client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
+    for _ in range(2):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "user@example.com", "password": "strong-password"},
+        )
+        assert response.status_code == 200
+    assert _session_count() == 2
+    assert client.get("/api/v1/auth/me").status_code == 200
+
+
+def test_deleted_user_session_rejected(client) -> None:
+    client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
+    client.post(
+        "/api/v1/auth/login",
+        json={"email": "user@example.com", "password": "strong-password"},
+    )
+    assert client.get("/api/v1/auth/me").status_code == 200
+    _db_rows("DELETE FROM users WHERE email = $1", "user@example.com")
+    assert client.get("/api/v1/auth/me").status_code == 401
+    assert _session_count() == 0

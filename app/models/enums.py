@@ -12,3 +12,11 @@ class ProjectStatus(StrEnum):
     ACTIVE = "active"
     COMPLETED = "completed"
     ARCHIVED = "archived"
+
+
+class LeadStatus(StrEnum):
+    NEW = "new"
+    CONTACTED = "contacted"
+    QUALIFIED = "qualified"
+    CONVERTED = "converted"
+    LOST = "lost"

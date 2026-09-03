@@ -32,3 +32,68 @@ def test_migrations_directory_exists() -> None:
     assert (MIGRATIONS_DIR / "versions").is_dir()
     assert (MIGRATIONS_DIR / "env.py").is_file()
     assert (MIGRATIONS_DIR / "script.py.mako").is_file()
+
+
+def test_revision_chain_is_contiguous_single_head() -> None:
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(ALEMBIC_INI))
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    script = ScriptDirectory.from_config(config)
+
+    heads = script.get_heads()
+    assert len(heads) == 1, f"expected a single head, got {heads}"
+
+    revision_id = heads[0]
+    visited: set[str] = set()
+    while revision_id is not None:
+        assert revision_id not in visited, f"cycle detected at {revision_id}"
+        visited.add(revision_id)
+        current = script.get_revision(revision_id)
+        revision_id = current.down_revision
+
+    all_revisions = {r.revision for r in script.walk_revisions()}
+    assert visited == all_revisions, "revision chain does not cover every migration"
+
+
+def test_upgrade_base_to_head_then_downgrade_all() -> None:
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(ALEMBIC_INI))
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    script = ScriptDirectory.from_config(config)
+    base = script.get_base()
+
+    try:
+        command.downgrade(config, base)
+        tables = _current_public_tables() - {"alembic_version"}
+        assert tables == set()
+    finally:
+        command.upgrade(config, "head")
+    assert {"users", "media"} <= _current_public_tables()
+
+
+def _current_public_tables() -> set[str]:
+    import asyncio
+
+    import asyncpg
+    from sqlalchemy.engine import make_url
+
+    from app.core.config import get_settings
+
+    async def run() -> set[str]:
+        url = make_url(get_settings().database_url)
+        conn = await asyncpg.connect(
+            host=url.host,
+            port=url.port or 5432,
+            user=url.username,
+            password=url.password,
+            database=url.database,
+        )
+        try:
+            rows = await conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+            return {row["tablename"] for row in rows}
+        finally:
+            await conn.close()
+
+    return asyncio.run(run())

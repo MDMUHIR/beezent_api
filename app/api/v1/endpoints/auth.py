@@ -92,7 +92,8 @@ async def logout(
         )
         await session.commit()
     clear_session_cookie(response)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 @router.get("/me", response_model=UserResponse)

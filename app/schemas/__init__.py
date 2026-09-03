@@ -1,4 +1,52 @@
 from app.schemas.auth import LoginRequest, RegisterRequest
+from app.schemas.cms import (
+    CaseStudyAdmin,
+    CaseStudyCreate,
+    CaseStudyPublic,
+    CaseStudyUpdate,
+    PaginatedResponse,
+    ProjectAdmin,
+    ProjectCreate,
+    ProjectPublic,
+    ProjectUpdate,
+    ServiceAdmin,
+    ServiceCreate,
+    ServicePublic,
+    ServiceUpdate,
+    SolutionAdmin,
+    SolutionCreate,
+    SolutionPublic,
+    SolutionUpdate,
+)
+from app.schemas.files import MediaAdmin, MediaMetadataUpdate
+from app.schemas.leads import LeadAdmin, LeadCreate, LeadPublicResponse, LeadUpdate
 from app.schemas.user import UserResponse
 
-__all__ = ["LoginRequest", "RegisterRequest", "UserResponse"]
+__all__ = [
+    "CaseStudyAdmin",
+    "CaseStudyCreate",
+    "CaseStudyPublic",
+    "CaseStudyUpdate",
+    "LeadAdmin",
+    "LeadCreate",
+    "LeadPublicResponse",
+    "LeadUpdate",
+    "LoginRequest",
+    "MediaAdmin",
+    "MediaMetadataUpdate",
+    "PaginatedResponse",
+    "ProjectAdmin",
+    "ProjectCreate",
+    "ProjectPublic",
+    "ProjectUpdate",
+    "RegisterRequest",
+    "ServiceAdmin",
+    "ServiceCreate",
+    "ServicePublic",
+    "ServiceUpdate",
+    "SolutionAdmin",
+    "SolutionCreate",
+    "SolutionPublic",
+    "SolutionUpdate",
+    "UserResponse",
+]

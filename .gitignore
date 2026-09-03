@@ -12,6 +12,9 @@ wheels/
 # Environment files
 .env
 
+# Local dev media uploads
+/media/
+
 # Test & coverage artifacts
 .pytest_cache/
 .coverage
