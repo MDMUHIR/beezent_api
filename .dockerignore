@@ -1,0 +1,33 @@
+# VCS / tooling artifacts
+.git
+.gitignore
+
+# Local environment and secrets (never baked into the image)
+.env
+.env.*
+!.env.example
+
+# Virtual environment / Python artifacts
+.venv
+__pycache__/
+*.py[cod]
+*.egg-info
+build/
+dist/
+
+# Tests, docs and caches are not needed at runtime
+tests/
+docs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local dev media uploads
+media/
+
+# Container files themselves are not part of the build context
+Dockerfile
+.dockerignore
+docker-compose.yml

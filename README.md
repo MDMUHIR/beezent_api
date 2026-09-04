@@ -421,6 +421,56 @@ Tests use an **isolated test database** (`beezents_test`, configurable via
 the first test run; authentication tests run against the real authentication
 implementation (Argon2id hashing, real session rows, real cookies).
 
+## Docker & deployment
+
+A production-oriented, multi-stage `Dockerfile` builds a minimal
+`python:3.12-slim` runtime image with a non-root user, a health check, and an
+entrypoint that applies migrations before starting Uvicorn.
+
+### Local development with docker compose
+
+`docker-compose.yml` runs the API together with a throwaway PostgreSQL 16 for
+local development (host DB port mapped to `5433` to avoid clashes):
+
+```sh
+docker compose up --build
+```
+
+The API is then at `http://localhost:8000`. The container entrypoint runs
+`alembic upgrade head` automatically on startup; PostgreSQL is **not**
+containerized for production — use an external/managed database and configure
+`DATABASE_URL` via the environment.
+
+### Building and running the image manually
+
+```sh
+docker build -t beezents-backend .
+docker run --rm -p 8000:8000 \
+  -e DATABASE_URL=postgresql+asyncpg://postgres:postgres@host:5432/beezents \
+  beezents-backend
+```
+
+### Container runtime environment variables
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | *(required)* | Async PostgreSQL DSN (`postgresql+asyncpg://…`) |
+| `UVICORN_WORKERS` | `1` | Uvicorn worker count |
+| `SKIP_MIGRATIONS` | `0` | Set `1` to skip auto-migrations (e.g. when a separate job runs them) |
+| `SESSION_COOKIE_NAME` | `beezents_session` | Session cookie name |
+| `SESSION_MAX_AGE_SECONDS` | `604800` | Session lifetime |
+| `COOKIE_SECURE` | `false` | Set `true` in production (HTTPS) |
+| `STORAGE_BACKEND` | `local` | `local` now; `s3`/`r2` future |
+| `MEDIA_ROOT` | `./media` | Local storage directory |
+| `MEDIA_MAX_SIZE_BYTES` | `10485760` | Max upload size |
+| `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated allowed origins |
+| `TRUSTED_HOSTS` | *(empty)* | Comma-separated allowed Host values |
+
+No secrets are baked into the image; `.env` is excluded via `.dockerignore`.
+The image's `HEALTHCHECK` calls `/health` with stdlib urllib (no `curl`
+required). Uvicorn handles graceful shutdown (`SIGTERM`/`SIGINT`), and the
+FastAPI lifespan disposes the SQLAlchemy engine on exit.
+
 ## Project structure
 
 ```
