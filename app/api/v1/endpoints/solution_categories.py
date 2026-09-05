@@ -26,9 +26,7 @@ async def get_solution_category(
     session: AsyncSession = Depends(get_session),
 ) -> SolutionCategoryDetail:
     """Return a category together with its published solutions."""
-    category = await session.scalar(
-        select(SolutionCategory).where(SolutionCategory.slug == slug)
-    )
+    category = await session.scalar(select(SolutionCategory).where(SolutionCategory.slug == slug))
     if category is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 

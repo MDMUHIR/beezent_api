@@ -1,7 +1,13 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.service_category import service_category_links
+
+if TYPE_CHECKING:
+    from app.models.service_category import ServiceCategory
 
 
 class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -15,3 +21,9 @@ class Service(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     featured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    categories: Mapped[list["ServiceCategory"]] = relationship(
+        secondary=service_category_links,
+        back_populates="services",
+        lazy="selectin",
+    )

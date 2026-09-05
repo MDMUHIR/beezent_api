@@ -79,6 +79,47 @@ class SolutionCategoryAdmin(SolutionCategoryRef):
 
 
 # --------------------------------------------------------------------------- #
+# Service categories
+# --------------------------------------------------------------------------- #
+class ServiceCategoryRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    slug: str
+
+
+class ServiceCategoryPublic(ServiceCategoryRef):
+    description: str | None = None
+    sort_order: int
+
+
+class ServiceCategoryDetail(ServiceCategoryPublic):
+    services: list["ServicePublic"] = Field(default_factory=list)
+
+
+class ServiceCategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    slug: SlugStr = Field(min_length=1, max_length=255)
+    description: str | None = None
+    sort_order: int = 0
+
+
+class ServiceCategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    slug: SlugStr | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    sort_order: int | None = None
+
+
+class ServiceCategoryAdmin(ServiceCategoryRef):
+    description: str | None = None
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# --------------------------------------------------------------------------- #
 # Project
 # --------------------------------------------------------------------------- #
 class ProjectBase(BaseModel):
@@ -178,10 +219,11 @@ class ServicePublic(BaseModel):
     sort_order: int
     created_at: datetime
     updated_at: datetime
+    categories: list[ServiceCategoryRef] = Field(default_factory=list)
 
 
 class ServiceCreate(ServiceBase):
-    pass
+    category_ids: list[UUID] | None = None
 
 
 class ServiceUpdate(BaseModel):
@@ -193,6 +235,7 @@ class ServiceUpdate(BaseModel):
     featured: bool | None = None
     published: bool | None = None
     sort_order: int | None = None
+    category_ids: list[UUID] | None = None
 
 
 class ServiceAdmin(ServiceBase):
@@ -201,6 +244,7 @@ class ServiceAdmin(ServiceBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    categories: list[ServiceCategoryRef] = Field(default_factory=list)
 
 
 class SolutionPublic(ServicePublic):
@@ -290,3 +334,4 @@ class CaseStudyAdmin(CaseStudyBase):
 
 
 SolutionCategoryDetail.model_rebuild()
+ServiceCategoryDetail.model_rebuild()

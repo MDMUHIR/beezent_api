@@ -5,6 +5,7 @@ from app.models.lead import Lead
 from app.models.media import Media
 from app.models.project import Project
 from app.models.service import Service
+from app.models.service_category import ServiceCategory, service_category_links
 from app.models.session import UserSession
 from app.models.solution import Solution
 from app.models.solution_category import SolutionCategory, solution_category_links
@@ -20,6 +21,7 @@ __all__ = [
     "ProjectStatus",
     "Role",
     "Service",
+    "ServiceCategory",
     "Solution",
     "SolutionCategory",
     "TimestampMixin",
@@ -27,4 +29,5 @@ __all__ = [
     "User",
     "UserSession",
     "solution_category_links",
+    "service_category_links",
 ]

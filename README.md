@@ -206,6 +206,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `GET` | `/api/v1/case-studies/{slug}` | — | Published case study detail |
 | `GET` | `/api/v1/services` | — | List published services |
 | `GET` | `/api/v1/services/{slug}` | — | Published service detail |
+| `GET` | `/api/v1/service-categories` | — | List service categories (public) |
+| `GET` | `/api/v1/service-categories/{slug}` | — | Category with its published services |
 | `GET` | `/api/v1/solutions` | — | List published solutions |
 | `GET` | `/api/v1/solutions/{slug}` | — | Published solution detail |
 | `GET` | `/api/v1/solution-categories` | — | List solution categories (public) |
@@ -217,6 +219,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/case-studies/{id}` | staff | Get / update / delete case study |
 | `GET`/`POST` | `/api/v1/admin/services` | staff | List / create services |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/services/{id}` | staff | Get / update / delete service |
+| `GET`/`POST` | `/api/v1/admin/service-categories` | staff | List / create service categories |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/service-categories/{id}` | staff | Get / update / delete service category |
 | `GET`/`POST` | `/api/v1/admin/solutions` | staff | List / create solutions |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/solutions/{id}` | staff | Get / update / delete solution |
 | `GET`/`POST` | `/api/v1/admin/solution-categories` | staff | List / create solution categories |
@@ -321,10 +325,10 @@ List endpoints accept `page` (default `1`, `>= 1`) and `page_size` (default
 | --- | --- |
 | projects | `q`, `status` (`active`/`completed`/`archived`), `featured`, `industry`, `project_type`, `sort` (`created_at`/`title`/`client_name`), `order` |
 | case-studies | `q`, `featured`, `project_slug`, `sort` (`created_at`/`title`), `order` |
-| services / solutions | `q`, `featured`, `sort` (`sort_order`/`name`/`created_at`), `order` |
+| services / solutions | `q`, `featured`, `category`, `sort` (`sort_order`/`name`/`created_at`), `order` |
 
-`solutions` additionally accepts `category` (a category **slug**) to filter
-solutions that belong to that category.
+`solutions` and `services` additionally accept `category` (a category **slug**)
+to filter items that belong to that category.
 
 `q` performs a case-insensitive search over the primary title/name fields.
 Invalid `sort` values return `422`.
@@ -407,6 +411,36 @@ UUIDs) in the admin create/update body:
 
 Unknown `category_ids` → `422`; omit the field (or use `null`) to leave
 categories unchanged.
+
+### Service categories
+
+Services have the same **many-to-many** categories feature as solutions.
+Categories are independent, CRUD-able resources; deleting a category only
+removes its links (services are never deleted).
+
+**Public:**
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/service-categories` | List all categories (for filter UI) |
+| `GET` | `/api/v1/service-categories/{slug}` | Category with its published services |
+
+`GET /api/v1/services?category={slug}` filters published services by category.
+`ServicePublic` / `ServiceAdmin` include a nested `categories` array of
+`{id, name, slug}` objects. Unknown category slugs return `404`.
+
+**Admin CRUD** (staff/admin only, under `/api/v1/admin/service-categories`):
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` / `POST` | `/api/v1/admin/service-categories` | List / create categories |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/admin/service-categories/{id}` | Get / update / delete |
+
+Category fields and behavior are identical to solution categories: `name`
+(required, unique), `slug` (required, unique, lowercase-hyphenated),
+`description` (optional), `sort_order` (int); duplicate `slug`/`name` → `409`,
+invalid `slug` → `422`. Attach categories to a service with `category_ids` in
+the admin create/update body; unknown ids → `422`.
 
 ### Response schemas
 

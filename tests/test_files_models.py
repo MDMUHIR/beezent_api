@@ -168,8 +168,8 @@ def test_alembic_downgrade_and_upgrade_restores_latest_table() -> None:
     try:
         command.downgrade(config, "-1")
         tables_without_media = run_db(_table_names)
-        assert "solution_categories" not in tables_without_media
+        assert "service_categories" not in tables_without_media
     finally:
         command.upgrade(config, "head")
     tables = run_db(_table_names)
-    assert "solution_categories" in tables
+    assert "service_categories" in tables

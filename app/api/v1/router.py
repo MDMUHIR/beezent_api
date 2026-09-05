@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     admin_files,
     admin_leads,
     admin_projects,
+    admin_service_categories,
     admin_services,
     admin_solution_categories,
     admin_solutions,
@@ -14,6 +15,7 @@ from app.api.v1.endpoints import (
     health,
     leads,
     projects,
+    service_categories,
     services,
     solution_categories,
     solutions,
@@ -27,11 +29,13 @@ api_router.include_router(dev.router)
 api_router.include_router(projects.router)
 api_router.include_router(case_studies.router)
 api_router.include_router(services.router)
+api_router.include_router(service_categories.router)
 api_router.include_router(solutions.router)
 api_router.include_router(solution_categories.router)
 api_router.include_router(leads.router)
 api_router.include_router(admin_projects.router)
 api_router.include_router(admin_services.router)
+api_router.include_router(admin_service_categories.router)
 api_router.include_router(admin_solutions.router)
 api_router.include_router(admin_solution_categories.router)
 api_router.include_router(admin_case_studies.router)

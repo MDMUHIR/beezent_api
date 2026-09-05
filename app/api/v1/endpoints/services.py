@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints.common import paginate
 from app.core.database import get_session
-from app.models import Service
+from app.models import Service, ServiceCategory
 from app.schemas import PaginatedResponse, ServicePublic
 
 router = APIRouter(prefix="/services", tags=["services"])
@@ -18,6 +18,7 @@ async def list_services(
     page_size: int = Query(12, ge=1, le=50),
     q: str | None = Query(None, max_length=100),
     featured: bool | None = None,
+    category: str | None = Query(None, max_length=100),
     sort: Literal["sort_order", "name", "created_at"] = "sort_order",
     order: Literal["asc", "desc"] = "asc",
     session: AsyncSession = Depends(get_session),
@@ -34,6 +35,8 @@ async def list_services(
         )
     if featured is not None:
         stmt = stmt.where(Service.featured.is_(featured))
+    if category:
+        stmt = stmt.join(Service.categories).where(ServiceCategory.slug == category)
 
     column = getattr(Service, sort)
     order_by = column.asc() if order == "asc" else column.desc()
