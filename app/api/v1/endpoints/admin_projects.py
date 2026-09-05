@@ -14,10 +14,25 @@ from app.api.v1.endpoints.common import (
     slug_exists,
 )
 from app.core.database import get_session
-from app.models import Project, User
+from app.models import Project, ProjectCategory, User
 from app.schemas import PaginatedResponse, ProjectAdmin, ProjectCreate, ProjectUpdate
 
 router = APIRouter(prefix="/admin/projects", tags=["admin-projects"])
+
+
+async def _resolve_categories(session: AsyncSession, ids: list[UUID]) -> list[ProjectCategory]:
+    """Resolve category ids to ORM objects, raising 422 if any is unknown."""
+    if not ids:
+        return []
+    cats = list(
+        (await session.scalars(select(ProjectCategory).where(ProjectCategory.id.in_(ids)))).all()
+    )
+    if len(cats) != len(set(ids)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="One or more categories do not exist",
+        )
+    return cats
 
 
 @router.get("", response_model=PaginatedResponse[ProjectAdmin])
@@ -58,7 +73,10 @@ async def create_project(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Slug '{payload.slug}' is already in use",
         )
-    project = Project(**payload.model_dump())
+    data = payload.model_dump(exclude={"category_ids"})
+    project = Project(**data)
+    if payload.category_ids:
+        project.categories = await _resolve_categories(session, payload.category_ids)
     session.add(project)
     try:
         await session.commit()
@@ -93,8 +111,14 @@ async def update_project(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Slug '{data['slug']}' is already in use",
             )
+    categories = None
+    if "category_ids" in data:
+        ids = data.pop("category_ids")
+        categories = await _resolve_categories(session, ids) if ids else []
     for key, value in data.items():
         setattr(project, key, value)
+    if categories is not None:
+        project.categories = categories
     try:
         await session.commit()
     except IntegrityError as exc:

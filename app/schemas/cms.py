@@ -120,6 +120,47 @@ class ServiceCategoryAdmin(ServiceCategoryRef):
 
 
 # --------------------------------------------------------------------------- #
+# Project categories
+# --------------------------------------------------------------------------- #
+class ProjectCategoryRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    slug: str
+
+
+class ProjectCategoryPublic(ProjectCategoryRef):
+    description: str | None = None
+    sort_order: int
+
+
+class ProjectCategoryDetail(ProjectCategoryPublic):
+    projects: list["ProjectPublic"] = Field(default_factory=list)
+
+
+class ProjectCategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    slug: SlugStr = Field(min_length=1, max_length=255)
+    description: str | None = None
+    sort_order: int = 0
+
+
+class ProjectCategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    slug: SlugStr | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    sort_order: int | None = None
+
+
+class ProjectCategoryAdmin(ProjectCategoryRef):
+    description: str | None = None
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# --------------------------------------------------------------------------- #
 # Project
 # --------------------------------------------------------------------------- #
 class ProjectBase(BaseModel):
@@ -160,10 +201,11 @@ class ProjectPublic(BaseModel):
     results: list[Any] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+    categories: list[ProjectCategoryRef] = Field(default_factory=list)
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    category_ids: list[UUID] | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -182,6 +224,7 @@ class ProjectUpdate(BaseModel):
     github_url: str | None = Field(default=None, max_length=500)
     technologies: list[Any] | None = None
     results: list[Any] | None = None
+    category_ids: list[UUID] | None = None
 
 
 class ProjectAdmin(ProjectBase):
@@ -190,6 +233,7 @@ class ProjectAdmin(ProjectBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    categories: list[ProjectCategoryRef] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -335,3 +379,4 @@ class CaseStudyAdmin(CaseStudyBase):
 
 SolutionCategoryDetail.model_rebuild()
 ServiceCategoryDetail.model_rebuild()
+ProjectCategoryDetail.model_rebuild()

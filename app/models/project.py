@@ -8,9 +8,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import ProjectStatus
+from app.models.project_category import project_category_links
 
 if TYPE_CHECKING:
     from app.models.case_study import CaseStudy
+    from app.models.project_category import ProjectCategory
 
 
 class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -52,3 +54,9 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     case_studies: Mapped[list[CaseStudy]] = relationship(back_populates="project")
+
+    categories: Mapped[list[ProjectCategory]] = relationship(
+        secondary=project_category_links,
+        back_populates="projects",
+        lazy="selectin",
+    )

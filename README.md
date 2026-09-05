@@ -202,6 +202,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `GET` | `/api/v1/dev/admin` | admin | Dev-only role check |
 | `GET` | `/api/v1/projects` | — | List published projects |
 | `GET` | `/api/v1/projects/{slug}` | — | Published project detail |
+| `GET` | `/api/v1/project-categories` | — | List project categories (public) |
+| `GET` | `/api/v1/project-categories/{slug}` | — | Category with its published projects |
 | `GET` | `/api/v1/case-studies` | — | List published case studies |
 | `GET` | `/api/v1/case-studies/{slug}` | — | Published case study detail |
 | `GET` | `/api/v1/services` | — | List published services |
@@ -215,6 +217,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `POST` | `/api/v1/leads` | — | Submit a public lead (inquiry) |
 | `GET`/`POST` | `/api/v1/admin/projects` | staff | List / create projects |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/projects/{id}` | staff | Get / update / delete project |
+| `GET`/`POST` | `/api/v1/admin/project-categories` | staff | List / create project categories |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/project-categories/{id}` | staff | Get / update / delete project category |
 | `GET`/`POST` | `/api/v1/admin/case-studies` | staff | List / create case studies |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/case-studies/{id}` | staff | Get / update / delete case study |
 | `GET`/`POST` | `/api/v1/admin/services` | staff | List / create services |
@@ -323,12 +327,13 @@ List endpoints accept `page` (default `1`, `>= 1`) and `page_size` (default
 
 | Resource | Params |
 | --- | --- |
-| projects | `q`, `status` (`active`/`completed`/`archived`), `featured`, `industry`, `project_type`, `sort` (`created_at`/`title`/`client_name`), `order` |
+| projects | `q`, `status` (`active`/`completed`/`archived`), `featured`, `industry`, `project_type`, `category`, `sort` (`created_at`/`title`/`client_name`), `order` |
 | case-studies | `q`, `featured`, `project_slug`, `sort` (`created_at`/`title`), `order` |
 | services / solutions | `q`, `featured`, `category`, `sort` (`sort_order`/`name`/`created_at`), `order` |
 
 `solutions` and `services` additionally accept `category` (a category **slug**)
-to filter items that belong to that category.
+to filter items that belong to that category. `projects` also accepts
+`category` for the same purpose.
 
 `q` performs a case-insensitive search over the primary title/name fields.
 Invalid `sort` values return `422`.
@@ -442,6 +447,35 @@ Category fields and behavior are identical to solution categories: `name`
 invalid `slug` → `422`. Attach categories to a service with `category_ids` in
 the admin create/update body; unknown ids → `422`.
 
+### Project categories
+
+Projects have the same **many-to-many** categories feature as services and
+solutions. Categories are independent, CRUD-able resources; deleting a category
+only removes its links (projects are never deleted).
+
+**Public:**
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/project-categories` | List all categories (for filter UI) |
+| `GET` | `/api/v1/project-categories/{slug}` | Category with its published projects |
+
+`GET /api/v1/projects?category={slug}` filters published projects by category
+(combinable with `status`, `industry`, `project_type`, `featured`).
+`ProjectPublic` / `ProjectAdmin` include a nested `categories` array of
+`{id, name, slug}` objects. Unknown category slugs return `404`.
+
+**Admin CRUD** (staff/admin only, under `/api/v1/admin/project-categories`):
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` / `POST` | `/api/v1/admin/project-categories` | List / create categories |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/admin/project-categories/{id}` | Get / update / delete |
+
+Category fields and behavior are identical to service/solution categories
+(`name`, `slug`, `description`, `sort_order`; `category_ids` on the project
+create/update body; unknown ids → `422`).
+
 ### Response schemas
 
 Public responses use dedicated schemas (`ProjectPublic`, `ServicePublic`,
@@ -472,6 +506,7 @@ noted):
 | `results` | array | List of outcome highlights |
 | `icon` | string? | Service/solution only |
 | `sort_order` | int | Service/solution only |
+| `categories` | array | `[{id, name, slug}]` category refs (projects/services/solutions) |
 | `created_at` / `updated_at` | datetime (ISO 8601) | Server timestamps |
 
 **`CaseStudyPublic`** adds/changes:

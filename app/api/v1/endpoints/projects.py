@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints.common import paginate
 from app.core.database import get_session
-from app.models import Project, ProjectStatus
+from app.models import Project, ProjectCategory, ProjectStatus
 from app.schemas import PaginatedResponse, ProjectPublic
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -21,6 +21,7 @@ async def list_projects(
     featured: bool | None = None,
     industry: str | None = Query(None, max_length=100),
     project_type: str | None = Query(None, max_length=100),
+    category: str | None = Query(None, max_length=100),
     sort: Literal["created_at", "title", "client_name"] = "created_at",
     order: Literal["asc", "desc"] = "desc",
     session: AsyncSession = Depends(get_session),
@@ -43,6 +44,8 @@ async def list_projects(
         stmt = stmt.where(Project.industry == industry)
     if project_type:
         stmt = stmt.where(Project.project_type == project_type)
+    if category:
+        stmt = stmt.join(Project.categories).where(ProjectCategory.slug == category)
 
     column = getattr(Project, sort)
     order_by = column.asc() if order == "asc" else column.desc()

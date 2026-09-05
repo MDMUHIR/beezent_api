@@ -4,6 +4,7 @@ from app.models.enums import LeadStatus, ProjectStatus, Role
 from app.models.lead import Lead
 from app.models.media import Media
 from app.models.project import Project
+from app.models.project_category import ProjectCategory, project_category_links
 from app.models.service import Service
 from app.models.service_category import ServiceCategory, service_category_links
 from app.models.session import UserSession
@@ -18,6 +19,7 @@ __all__ = [
     "LeadStatus",
     "Media",
     "Project",
+    "ProjectCategory",
     "ProjectStatus",
     "Role",
     "Service",
@@ -30,4 +32,5 @@ __all__ = [
     "UserSession",
     "solution_category_links",
     "service_category_links",
+    "project_category_links",
 ]
