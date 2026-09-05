@@ -11,9 +11,10 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
-from app.core.database import dispose_engine
+from app.core.database import AsyncSessionLocal, dispose_engine
 from app.core.logging import setup_logging
 from app.core.middleware import SECURITY_HEADERS, SecurityHeadersMiddleware
+from app.core.seed import seed_dev_admin
 
 logger = logging.getLogger("app.main")
 
@@ -23,6 +24,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
+    if settings.seed_dev_admin:
+        async with AsyncSessionLocal() as session:
+            await seed_dev_admin(session, settings)
     yield
     await dispose_engine()
 

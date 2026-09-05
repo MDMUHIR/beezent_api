@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     # Empty = Host validation disabled (development convenience).
     trusted_hosts: str = ""
 
+    # Development seed admin (testing only).
+    # Set SEED_DEV_ADMIN=true and provide email/password to auto-create an admin
+    # on startup. This is a convenience for local testing and is ignored unless
+    # enabled explicitly.
+    seed_dev_admin: bool = False
+    seed_admin_email: str = ""
+    seed_admin_password: str = ""
+    seed_admin_full_name: str = "Default Admin"
+    seed_admin_role: str = "admin"
+
 
 @lru_cache
 def get_settings() -> Settings:

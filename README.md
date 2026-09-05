@@ -85,6 +85,82 @@ ignored in registration/profile input. Roles are assigned by administrators.
 Development-only role checks (for testing authorization):
 `GET /api/v1/dev/staff` and `GET /api/v1/dev/admin`.
 
+### Development seed admin (testing only)
+
+When `SEED_DEV_ADMIN=true` (set in `.env` / `docker-compose.yml` for dev), the
+app auto-creates an `admin` account on startup if it doesn't already exist. It
+is active and verified, so you can immediately log in and access admin
+endpoints.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SEED_DEV_ADMIN` | `false` | Enable auto-seeding of the dev admin |
+| `SEED_ADMIN_EMAIL` | *(empty)* | Admin email (normalized to lowercase) |
+| `SEED_ADMIN_PASSWORD` | *(empty)* | Admin password (hashed with Argon2id) |
+| `SEED_ADMIN_FULL_NAME` | `Default Admin` | Admin display name |
+| `SEED_ADMIN_ROLE` | `admin` | Role granted to the seeded account |
+
+**Default dev admin credentials (local dev only):**
+
+```
+Email:    MBadmin@beezents.com
+Password: Bee@MB
+```
+
+Log in to obtain the session cookie, then use it for staff/admin endpoints:
+
+```sh
+curl -c cookies.txt -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"MBadmin@beezents.com","password":"Bee@MB"}'
+curl -b cookies.txt http://localhost:8000/api/v1/auth/me
+```
+
+> **Security:** this feature is development-only. Never set `SEED_DEV_ADMIN=true`
+> in production — keep the default `false`.
+
+### Auth request / response
+
+**`POST /api/v1/auth/register`** (201 on success):
+
+```json
+{ "email": "user@example.com", "password": "strongpass123", "full_name": "Jane Doe" }
+```
+
+- `email` — valid email; normalized to lowercase. Duplicate → `409`.
+- `password` — 8–128 chars, must not be blank/whitespace-only.
+- `full_name` — 1–255 chars.
+- Response is a `UserResponse` (see below). The `role` field is **ignored** if
+  supplied — new users are always created with role `user`.
+
+**`POST /api/v1/auth/login`** (200 on success):
+
+```json
+{ "email": "user@example.com", "password": "strongpass123" }
+```
+
+- Sets the HTTP-only session cookie on success; invalid credentials or an
+  inactive account return a generic `401 Invalid email or password`.
+- The session cookie is `HttpOnly`, `SameSite=lax`, and `Secure` when
+  `COOKIE_SECURE=true`. Pass it to protected endpoints (e.g. via a cookie jar).
+
+**`UserResponse`** (from `/register`, `/login`, `/me`):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | User id |
+| `email` | string | Normalized lowercase |
+| `full_name` | string | Display name |
+| `role` | enum | `user` / `client` / `staff` / `admin` (never self-assignable) |
+| `is_active` | bool | Whether the account is enabled |
+| `last_login_at` | datetime? | Last successful login |
+
+**`GET /api/v1/auth/me`** — returns the `UserResponse` of the authenticated
+user, or `401` without a valid session.
+
+**`POST /api/v1/auth/logout`** — deletes the server-side session and clears the
+cookie; returns `204`.
+
 ### Security notes
 
 - Session cookie is `HttpOnly` and `SameSite=lax`; `Secure` is enabled by setting
@@ -102,7 +178,111 @@ Development-only role checks (for testing authorization):
 uv run uvicorn app.main:app --reload
 ```
 
-The API is available at `http://localhost:8000`; interactive docs at `/docs`.
+The API is available at `http://localhost:8000`; interactive docs at `/docs`
+(Swagger UI) and `/redoc` (ReDoc). All endpoints are versioned under the
+`/api/v1` prefix.
+
+## Quick reference
+
+**Base URL:** `http://<host>:8000/api/v1` — interactive docs at
+`http://<host>:8000/docs`.
+
+### Endpoint index
+
+| Method | Endpoint | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/health` | — | App health check |
+| `GET` | `/api/v1/health` | — | Same under the versioned prefix |
+| `GET` | `/api/v1/health/db` | — | PostgreSQL reachability check |
+| `POST` | `/api/v1/auth/register` | — | Register a user (`user` role) |
+| `POST` | `/api/v1/auth/login` | — | Log in, sets session cookie |
+| `POST` | `/api/v1/auth/logout` | cookie | Invalidate session + clear cookie |
+| `GET` | `/api/v1/auth/me` | cookie | Current authenticated user |
+| `GET` | `/api/v1/dev/staff` | staff | Dev-only role check |
+| `GET` | `/api/v1/dev/admin` | admin | Dev-only role check |
+| `GET` | `/api/v1/projects` | — | List published projects |
+| `GET` | `/api/v1/projects/{slug}` | — | Published project detail |
+| `GET` | `/api/v1/case-studies` | — | List published case studies |
+| `GET` | `/api/v1/case-studies/{slug}` | — | Published case study detail |
+| `GET` | `/api/v1/services` | — | List published services |
+| `GET` | `/api/v1/services/{slug}` | — | Published service detail |
+| `GET` | `/api/v1/solutions` | — | List published solutions |
+| `GET` | `/api/v1/solutions/{slug}` | — | Published solution detail |
+| `POST` | `/api/v1/leads` | — | Submit a public lead (inquiry) |
+| `GET`/`POST` | `/api/v1/admin/projects` | staff | List / create projects |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/projects/{id}` | staff | Get / update / delete project |
+| `GET`/`POST` | `/api/v1/admin/case-studies` | staff | List / create case studies |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/case-studies/{id}` | staff | Get / update / delete case study |
+| `GET`/`POST` | `/api/v1/admin/services` | staff | List / create services |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/services/{id}` | staff | Get / update / delete service |
+| `GET`/`POST` | `/api/v1/admin/solutions` | staff | List / create solutions |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/solutions/{id}` | staff | Get / update / delete solution |
+| `GET` | `/api/v1/admin/leads` | staff | List leads |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/leads/{id}` | staff | Get / update / delete lead |
+| `POST` | `/api/v1/admin/files` | staff | Upload media (multipart) |
+| `GET` | `/api/v1/admin/files` | staff | List media |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/files/{id}` | staff | Get / update / delete media |
+
+> **Auth column:** `—` = public (no authentication), `cookie` = any logged-in
+> user, `staff`/`admin` = role-gated (see [Authentication](#authentication)).
+
+### Examples with curl
+
+Authentication is **session-based**: `login` returns the token as an HTTP-only
+cookie, which subsequent requests send automatically when you reuse a cookie
+jar (`-c` / `-b`).
+
+```sh
+# Health checks
+curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/health/db
+
+# Register a user (201) — duplicate email returns 409
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"strongpass123","full_name":"Jane Doe"}'
+
+# Log in, saving the session cookie to a jar (200)
+curl -c cookies.txt -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"strongpass123"}'
+
+# Who am I? (200, or 401 without a valid session)
+curl -b cookies.txt http://localhost:8000/api/v1/auth/me
+
+# Public CMS reads — no auth needed
+curl "http://localhost:8000/api/v1/projects?featured=true&sort=created_at&order=desc"
+curl http://localhost:8000/api/v1/services/my-service
+
+# Submit a public lead (201)
+curl -X POST http://localhost:8000/api/v1/leads \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Jane Doe","email":"jane@example.com","message":"Please reach out about AI automation."}'
+
+# Log out (204)
+curl -b cookies.txt -X POST http://localhost:8000/api/v1/auth/logout
+```
+
+Admin endpoints (`/admin/*`) require a **staff/admin** session cookie. A
+user with only the `user` role receives `403`; a missing/invalid session gets
+`401`:
+
+```sh
+# Create a project (requires staff role)
+curl -b cookies.txt -X POST http://localhost:8000/api/v1/admin/projects \
+  -H "Content-Type: application/json" \
+  -d '{"title":"AI Chatbot","slug":"ai-chatbot","published":true,"featured":true}'
+
+# List unpublished + published leads (requires staff role)
+curl -b cookies.txt "http://localhost:8000/api/v1/admin/leads?status=new&order=desc"
+
+# Upload media (multipart form: file + optional folder/alt_text)
+curl -b cookies.txt -X POST http://localhost:8000/api/v1/admin/files \
+  -F "file=@./photo.png" -F "folder=hero" -F "alt_text=Hero image"
+```
+
+See each section below for query parameters, filters, and request/response
+schemas.
 
 ## Public CMS API
 
@@ -150,6 +330,45 @@ Public responses use dedicated schemas (`ProjectPublic`, `ServicePublic`,
 nested `project` reference (`{slug, title}`) when linked to a project.
 Admin-oriented schemas (`*Create`, `*Update`, `*Admin`) exist for the future
 admin CMS API.
+
+**`ProjectPublic`** (also applies to `ServicePublic` / `SolutionPublic` where
+noted):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | Resource id |
+| `title` / `name` | string | Primary title (services/solutions use `name`) |
+| `slug` | string | URL-friendly identifier |
+| `short_description` | string? | ≤ 300 chars |
+| `description` | string? | Long-form body |
+| `client_name` | string? | Project only |
+| `industry` | string? | Project only |
+| `project_type` | string? | Project only |
+| `status` | enum | Project only: `active` / `completed` / `archived` |
+| `featured` | bool | Highlighted in listings |
+| `cover_image` | string? | Project only (media URL) |
+| `live_url` / `github_url` | string? | Project only |
+| `technologies` | array | List of tech tags |
+| `results` | array | List of outcome highlights |
+| `icon` | string? | Service/solution only |
+| `sort_order` | int | Service/solution only |
+| `created_at` / `updated_at` | datetime (ISO 8601) | Server timestamps |
+
+**`CaseStudyPublic`** adds/changes:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `project` | object? | `{slug, title}` of the linked project |
+| `summary` | string? | Short overview |
+| `challenge` / `solution` / `implementation` | string? | Narrative sections |
+| `metrics` | array | Outcome metrics |
+| `seo_title` / `seo_description` | string? | Metadata for search engines |
+
+All list endpoints wrap items in a consistent pagination envelope:
+
+```json
+{ "items": [...], "total": 12, "page": 1, "page_size": 12, "pages": 1 }
+```
 
 ## Admin CMS API
 
@@ -407,6 +626,35 @@ is wired to `app.models.Base.metadata`.
 The DB check returns `{"status": "healthy"}` with HTTP 200 when PostgreSQL is
 reachable, and HTTP 503 with `{"detail": "Database unavailable"}` otherwise. No
 credentials, connection strings, or stack traces are exposed.
+
+## HTTP error reference
+
+Errors return JSON in the shape `{"detail": "..."}` (a single string, or a
+list of objects for validation errors).
+
+| Status | Meaning | Common causes |
+| --- | --- | --- |
+| `400` | Bad request | Untrusted `Host` header (when `TRUSTED_HOSTS` is set) |
+| `401` | Unauthenticated | Missing/invalid/expired session, bad credentials |
+| `403` | Forbidden | Authenticated but lacks the required role (`staff`/`admin`) |
+| `404` | Not found | Unknown resource id, slug, or route |
+| `409` | Conflict | Duplicate email (register), duplicate slug (admin create) |
+| `413` | Payload too large | Upload larger than `MEDIA_MAX_SIZE_BYTES` |
+| `422` | Validation error | Malformed body/query, invalid slug/UUID, unsupported file type, bad `sort` value |
+| `500` | Server error | Always `{"detail": "Internal Server Error"}` — no internals leaked |
+
+Validation errors use FastAPI's default shape with a `detail` array, e.g.:
+
+```json
+{
+  "detail": [
+    { "loc": ["body", "password"], "msg": "String should have at least 8 characters", "type": "string_too_short" }
+  ]
+}
+```
+
+See the [API security / hardening](#api-security--hardening) section for how
+these are produced.
 
 ## Tests and linting
 
