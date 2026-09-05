@@ -7,6 +7,7 @@ from app.models.project import Project
 from app.models.service import Service
 from app.models.session import UserSession
 from app.models.solution import Solution
+from app.models.solution_category import SolutionCategory, solution_category_links
 from app.models.user import User
 
 __all__ = [
@@ -20,8 +21,10 @@ __all__ = [
     "Role",
     "Service",
     "Solution",
+    "SolutionCategory",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",
     "User",
     "UserSession",
+    "solution_category_links",
 ]

@@ -208,6 +208,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `GET` | `/api/v1/services/{slug}` | — | Published service detail |
 | `GET` | `/api/v1/solutions` | — | List published solutions |
 | `GET` | `/api/v1/solutions/{slug}` | — | Published solution detail |
+| `GET` | `/api/v1/solution-categories` | — | List solution categories (public) |
+| `GET` | `/api/v1/solution-categories/{slug}` | — | Category with its published solutions |
 | `POST` | `/api/v1/leads` | — | Submit a public lead (inquiry) |
 | `GET`/`POST` | `/api/v1/admin/projects` | staff | List / create projects |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/projects/{id}` | staff | Get / update / delete project |
@@ -217,6 +219,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/services/{id}` | staff | Get / update / delete service |
 | `GET`/`POST` | `/api/v1/admin/solutions` | staff | List / create solutions |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/solutions/{id}` | staff | Get / update / delete solution |
+| `GET`/`POST` | `/api/v1/admin/solution-categories` | staff | List / create solution categories |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/solution-categories/{id}` | staff | Get / update / delete solution category |
 | `GET` | `/api/v1/admin/leads` | staff | List leads |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/leads/{id}` | staff | Get / update / delete lead |
 | `POST` | `/api/v1/admin/files` | staff | Upload media (multipart) |
@@ -319,8 +323,90 @@ List endpoints accept `page` (default `1`, `>= 1`) and `page_size` (default
 | case-studies | `q`, `featured`, `project_slug`, `sort` (`created_at`/`title`), `order` |
 | services / solutions | `q`, `featured`, `sort` (`sort_order`/`name`/`created_at`), `order` |
 
+`solutions` additionally accepts `category` (a category **slug**) to filter
+solutions that belong to that category.
+
 `q` performs a case-insensitive search over the primary title/name fields.
 Invalid `sort` values return `422`.
+
+### Solution categories
+
+Solutions have an optional **many-to-many** relationship with **solution
+categories**. A solution can belong to any number of categories, and a category
+can be shared by many solutions. Categories are independent, CRUD-able
+resources; deleting a category only removes its links (solutions are never
+deleted).
+
+**Public:**
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/solution-categories` | List all categories (for filter UI) |
+| `GET` | `/api/v1/solution-categories/{slug}` | Category with its published solutions |
+
+`GET /api/v1/solutions?category={slug}` filters published solutions by category.
+
+The category **detail** endpoint returns a category together with its published
+solutions, so the frontend can render a category page directly:
+
+```json
+{
+  "id": "bf1be62b-56b9-4e1b-b6f3-d0ca07873bcb",
+  "name": "GenAI",
+  "slug": "genai",
+  "description": "Generative AI solutions",
+  "sort_order": 1,
+  "solutions": [
+    {
+      "id": "7f1809ca-417b-45a5-b5b5-ca9dca3eb072",
+      "name": "GenAI Copilot",
+      "slug": "genai-copilot",
+      "featured": false,
+      "categories": [{ "id": "bf1be62b-...", "name": "GenAI", "slug": "genai" }]
+    }
+  ]
+}
+```
+
+Unknown category slugs return `404`.
+
+`SolutionPublic` / `SolutionAdmin` include a nested `categories` array of
+`{id, name, slug}` objects, e.g.:
+
+```json
+{
+  "name": "AI Support Bot",
+  "slug": "ai-support-bot",
+  "categories": [
+    { "id": "90587ded-...", "name": "AI Automation", "slug": "ai-automation" }
+  ]
+}
+```
+
+**Admin CRUD** (staff/admin only, under `/api/v1/admin/solution-categories`):
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` / `POST` | `/api/v1/admin/solution-categories` | List / create categories |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/admin/solution-categories/{id}` | Get / update / delete |
+
+Category fields: `name` (required, unique), `slug` (required, unique,
+lowercase-hyphenated), `description` (optional), `sort_order` (int). Duplicate
+`slug` or `name` → `409`; invalid `slug` → `422`.
+
+To attach categories to a solution, pass `category_ids` (an array of category
+UUIDs) in the admin create/update body:
+
+```json
+{
+  "name": "AI Support Bot",
+  "slug": "ai-support-bot",
+  "category_ids": ["90587ded-07e2-494c-8292-8526ffe8cc30"]
+}
+```
+
+Unknown `category_ids` → `422`; omit the field (or use `null`) to leave
+categories unchanged.
 
 ### Response schemas
 

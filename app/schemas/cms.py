@@ -38,6 +38,47 @@ class ProjectRefPublic(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Solution categories
+# --------------------------------------------------------------------------- #
+class SolutionCategoryRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    slug: str
+
+
+class SolutionCategoryPublic(SolutionCategoryRef):
+    description: str | None = None
+    sort_order: int
+
+
+class SolutionCategoryDetail(SolutionCategoryPublic):
+    solutions: list["SolutionPublic"] = Field(default_factory=list)
+
+
+class SolutionCategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    slug: SlugStr = Field(min_length=1, max_length=255)
+    description: str | None = None
+    sort_order: int = 0
+
+
+class SolutionCategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    slug: SlugStr | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    sort_order: int | None = None
+
+
+class SolutionCategoryAdmin(SolutionCategoryRef):
+    description: str | None = None
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# --------------------------------------------------------------------------- #
 # Project
 # --------------------------------------------------------------------------- #
 class ProjectBase(BaseModel):
@@ -163,19 +204,19 @@ class ServiceAdmin(ServiceBase):
 
 
 class SolutionPublic(ServicePublic):
-    pass
+    categories: list[SolutionCategoryRef] = Field(default_factory=list)
 
 
 class SolutionCreate(ServiceBase):
-    pass
+    category_ids: list[UUID] | None = None
 
 
 class SolutionUpdate(ServiceUpdate):
-    pass
+    category_ids: list[UUID] | None = None
 
 
 class SolutionAdmin(ServiceAdmin):
-    pass
+    categories: list[SolutionCategoryRef] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -246,3 +287,6 @@ class CaseStudyAdmin(CaseStudyBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+SolutionCategoryDetail.model_rebuild()

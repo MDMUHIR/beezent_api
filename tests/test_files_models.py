@@ -162,14 +162,14 @@ def test_media_table_exists() -> None:
     assert "media" in tables
 
 
-def test_alembic_downgrade_and_upgrade_restores_media_table() -> None:
+def test_alembic_downgrade_and_upgrade_restores_latest_table() -> None:
     config = Config(str(BASE_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BASE_DIR / "migrations"))
     try:
         command.downgrade(config, "-1")
         tables_without_media = run_db(_table_names)
-        assert "media" not in tables_without_media
+        assert "solution_categories" not in tables_without_media
     finally:
         command.upgrade(config, "head")
     tables = run_db(_table_names)
-    assert "media" in tables
+    assert "solution_categories" in tables
