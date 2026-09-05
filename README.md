@@ -214,6 +214,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `GET` | `/api/v1/solutions/{slug}` | — | Published solution detail |
 | `GET` | `/api/v1/solution-categories` | — | List solution categories (public) |
 | `GET` | `/api/v1/solution-categories/{slug}` | — | Category with its published solutions |
+| `GET` | `/api/v1/team-members` | — | List published team members |
+| `GET` | `/api/v1/team-members/{slug}` | — | Published team member detail |
 | `POST` | `/api/v1/leads` | — | Submit a public lead (inquiry) |
 | `GET`/`POST` | `/api/v1/admin/projects` | staff | List / create projects |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/projects/{id}` | staff | Get / update / delete project |
@@ -229,6 +231,8 @@ The API is available at `http://localhost:8000`; interactive docs at `/docs`
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/solutions/{id}` | staff | Get / update / delete solution |
 | `GET`/`POST` | `/api/v1/admin/solution-categories` | staff | List / create solution categories |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/solution-categories/{id}` | staff | Get / update / delete solution category |
+| `GET`/`POST` | `/api/v1/admin/team-members` | staff | List / create team members |
+| `GET`/`PATCH`/`DELETE` | `/api/v1/admin/team-members/{id}` | staff | Get / update / delete team member |
 | `GET` | `/api/v1/admin/leads` | staff | List leads |
 | `GET`/`PATCH`/`DELETE` | `/api/v1/admin/leads/{id}` | staff | Get / update / delete lead |
 | `POST` | `/api/v1/admin/files` | staff | Upload media (multipart) |
@@ -475,6 +479,76 @@ only removes its links (projects are never deleted).
 Category fields and behavior are identical to service/solution categories
 (`name`, `slug`, `description`, `sort_order`; `category_ids` on the project
 create/update body; unknown ids → `422`).
+
+## Team Members (Talent & Leadership)
+
+Showcases the people behind the agency, split into two groups:
+`leadership` (executives/founders) and `talent` (engineers, designers, etc.).
+**Only members with `published = true` are exposed publicly.**
+
+### Public endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/team-members` | List published members (paginated) |
+| `GET` | `/api/v1/team-members/{slug}` | Published member detail |
+
+List params: `page`, `page_size`, `q` (searches `name`/`role`/`bio`),
+`category` (`leadership`/`talent`), `featured`, `sort`
+(`sort_order`/`name`/`role`/`created_at`), `order` (`asc`/`desc`, default
+`asc`).
+
+```sh
+curl "http://localhost:8000/api/v1/team-members?category=leadership&sort=sort_order"
+curl http://localhost:8000/api/v1/team-members/sarah-khan
+```
+
+Response (`TeamMemberPublic`):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | Member id |
+| `name` | string | Full name |
+| `slug` | string | Unique URL identifier |
+| `role` | string | Designation (e.g. "Chief Executive Officer") |
+| `bio` | string? | Short biography |
+| `avatar_url` | string? | Photo URL (uploaded media) |
+| `category` | enum | `leadership` or `talent` |
+| `featured` | bool | Highlighted member |
+| `sort_order` | int | Display ordering |
+| `created_at` / `updated_at` | datetime | Server timestamps |
+
+Note: `TeamMemberPublic` intentionally omits `published` — internal field never
+exposed publicly.
+
+### Admin CRUD (staff/admin only)
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` / `POST` | `/api/v1/admin/team-members` | List / create members (includes unpublished) |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/admin/team-members/{id}` | Get / update / delete |
+
+Create/update body:
+
+```json
+{
+  "name": "Sarah Khan",
+  "slug": "sarah-khan",
+  "role": "Chief Executive Officer",
+  "category": "leadership",
+  "bio": "Leads strategy and growth.",
+  "avatar_url": "/media/abc123.png",
+  "featured": true,
+  "published": true,
+  "sort_order": 1
+}
+```
+
+- `slug` is normalized to lowercase-hyphenated; invalid → `422`.
+- Duplicate `slug` → `409`.
+- `PATCH` is partial (`exclude_unset=True`).
+- List includes `category`, `q`, `sort`, `order` filters and **includes
+  unpublished members**.
 
 ### Response schemas
 

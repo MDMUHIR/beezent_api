@@ -20,3 +20,8 @@ class LeadStatus(StrEnum):
     QUALIFIED = "qualified"
     CONVERTED = "converted"
     LOST = "lost"
+
+
+class TeamMemberCategory(StrEnum):
+    LEADERSHIP = "leadership"
+    TALENT = "talent"

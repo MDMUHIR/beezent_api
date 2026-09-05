@@ -38,6 +38,12 @@ from app.schemas.cms import (
 )
 from app.schemas.files import MediaAdmin, MediaMetadataUpdate
 from app.schemas.leads import LeadAdmin, LeadCreate, LeadPublicResponse, LeadUpdate
+from app.schemas.team import (
+    TeamMemberAdmin,
+    TeamMemberCreate,
+    TeamMemberPublic,
+    TeamMemberUpdate,
+)
 from app.schemas.user import UserResponse
 
 __all__ = [
@@ -84,5 +90,9 @@ __all__ = [
     "SolutionCreate",
     "SolutionPublic",
     "SolutionUpdate",
+    "TeamMemberAdmin",
+    "TeamMemberCreate",
+    "TeamMemberPublic",
+    "TeamMemberUpdate",
     "UserResponse",
 ]
