@@ -27,8 +27,10 @@ class Settings(BaseSettings):
     storage_backend: str = "local"
     # Local backend root directory for uploaded media (dev).
     media_root: str = "./media"
-    # Maximum accepted upload size in bytes (10 MiB default).
+    # Maximum accepted upload size in bytes (10 MiB default for images/files).
     media_max_size_bytes: int = 10 * 1024 * 1024
+    # Maximum accepted video upload size in bytes (100 MiB default).
+    media_max_video_size_bytes: int = 100 * 1024 * 1024
 
     # API security
     # Comma-separated allowed CORS origins (e.g. "http://localhost:3000").

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from app.models.enums import ProjectStatus
+from app.models.enums import DemoVideoType, ProjectStatus
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -177,6 +177,8 @@ class ProjectBase(BaseModel):
     cover_image: str | None = Field(default=None, max_length=500)
     live_url: str | None = Field(default=None, max_length=500)
     github_url: str | None = Field(default=None, max_length=500)
+    demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_type: DemoVideoType | None = None
     technologies: list[Any] = Field(default_factory=list)
     results: list[Any] = Field(default_factory=list)
 
@@ -197,6 +199,8 @@ class ProjectPublic(BaseModel):
     cover_image: str | None = None
     live_url: str | None = None
     github_url: str | None = None
+    demo_video_url: str | None = None
+    demo_video_type: DemoVideoType | None = None
     technologies: list[Any] = Field(default_factory=list)
     results: list[Any] = Field(default_factory=list)
     created_at: datetime
@@ -224,6 +228,8 @@ class ProjectUpdate(BaseModel):
     github_url: str | None = Field(default=None, max_length=500)
     technologies: list[Any] | None = None
     results: list[Any] | None = None
+    demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_type: DemoVideoType | None = None
     category_ids: list[UUID] | None = None
 
 
@@ -293,18 +299,30 @@ class ServiceAdmin(ServiceBase):
 
 class SolutionPublic(ServicePublic):
     categories: list[SolutionCategoryRef] = Field(default_factory=list)
+    image_url: str | None = None
+    demo_video_url: str | None = None
+    demo_video_type: DemoVideoType | None = None
 
 
 class SolutionCreate(ServiceBase):
     category_ids: list[UUID] | None = None
+    image_url: str | None = Field(default=None, max_length=500)
+    demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_type: DemoVideoType | None = None
 
 
 class SolutionUpdate(ServiceUpdate):
     category_ids: list[UUID] | None = None
+    image_url: str | None = Field(default=None, max_length=500)
+    demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_type: DemoVideoType | None = None
 
 
 class SolutionAdmin(ServiceAdmin):
     categories: list[SolutionCategoryRef] = Field(default_factory=list)
+    image_url: str | None = None
+    demo_video_url: str | None = None
+    demo_video_type: DemoVideoType | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -315,6 +333,7 @@ class CaseStudyBase(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     slug: SlugStr = Field(min_length=1, max_length=255)
     summary: str | None = None
+    image_url: str | None = Field(default=None, max_length=500)
     challenge: str | None = None
     solution: str | None = None
     implementation: str | None = None
@@ -335,6 +354,7 @@ class CaseStudyPublic(BaseModel):
     title: str
     slug: str
     summary: str | None = None
+    image_url: str | None = None
     challenge: str | None = None
     solution: str | None = None
     implementation: str | None = None
@@ -357,6 +377,7 @@ class CaseStudyUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     slug: SlugStr | None = Field(default=None, min_length=1, max_length=255)
     summary: str | None = None
+    image_url: str | None = Field(default=None, max_length=500)
     challenge: str | None = None
     solution: str | None = None
     implementation: str | None = None

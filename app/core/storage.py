@@ -15,6 +15,11 @@ ALLOWED_MIME_TYPES: dict[str, str] = {
     "image/avif": ".avif",
     "image/svg+xml": ".svg",
     "application/pdf": ".pdf",
+    # Direct video uploads (e.g. demo videos for projects/solutions).
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+    "video/ogg": ".ogv",
 }
 
 

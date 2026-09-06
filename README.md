@@ -738,8 +738,11 @@ local backend.
 ### Security behavior
 
 - **Allowed MIME types**: `image/jpeg`, `image/png`, `image/gif`, `image/webp`,
-  `image/avif`, `image/svg+xml`, `application/pdf`. Anything else → `422`.
-- **Size limit**: `MEDIA_MAX_SIZE_BYTES` (default 10 MiB); larger uploads →
+  `image/avif`, `image/svg+xml`, `application/pdf`, and direct video uploads
+  `video/mp4`, `video/webm`, `video/quicktime` (`.mov`), `video/ogg` (`.ogv`).
+  Anything else → `422`.
+- **Size limits**: `MEDIA_MAX_SIZE_BYTES` (default 10 MiB) for images/files and
+  `MEDIA_MAX_VIDEO_SIZE_BYTES` (default 100 MiB) for videos; larger uploads →
   `413`.
 - **Storage naming is UUID-based**: `storage_key = {uuid}{ext}`, where the
   extension comes from the validated MIME type — never from user input. Client
@@ -757,12 +760,48 @@ local backend.
 | --- | --- | --- |
 | `STORAGE_BACKEND` | `local` | Storage backend name (`local` now; `s3`/`r2` future) |
 | `MEDIA_ROOT` | `./media` | Local backend directory |
-| `MEDIA_MAX_SIZE_BYTES` | `10485760` | Max upload size (10 MiB) |
+| `MEDIA_MAX_SIZE_BYTES` | `10485760` | Max image/file upload size (10 MiB) |
+| `MEDIA_MAX_VIDEO_SIZE_BYTES` | `104857600` | Max video upload size (100 MiB) |
 
 The `media` table columns: `original_name`, `storage_key` (unique), `public_url`,
 `mime_type`, `size`, `width`, `height`, `alt_text`, `folder`, `uploaded_by`,
 `created_at`, `updated_at`. `width`/`height` are reserved for future
 image-dimension extraction and are currently `NULL`.
+
+### Photos & demo videos on content
+
+Content models reference uploaded media by URL (the media's `public_url`, e.g.
+`/media/<key>.png`). Upload the file first via `POST /api/v1/admin/files`, then
+set the field to the returned `public_url` in the content create/update body.
+
+| Resource | Photo field | Demo video fields |
+| --- | --- | --- |
+| projects | `cover_image` | `demo_video_url` + `demo_video_type` |
+| solutions | `image_url` | `demo_video_url` + `demo_video_type` |
+| case-studies | `image_url` | — |
+| team-members | `avatar_url` | — |
+
+**Demo video** (`projects`, `solutions`) supports both a direct upload and a
+YouTube link via `demo_video_type`:
+
+- `demo_video_type: "youtube"` → `demo_video_url` is a YouTube URL (e.g.
+  `https://www.youtube.com/watch?v=...`).
+- `demo_video_type: "upload"` → `demo_video_url` is the uploaded video's
+  `public_url` (`/media/<key>.mp4`). Upload videos through the media API
+  (`video/mp4`, `video/webm`, `video/mov`, `video/ogv`).
+
+```sh
+# 1. Upload a photo
+IMG=$(curl -b cookies.txt -X POST http://localhost:8000/api/v1/admin/files \
+  -F "file=@./hero.png" | jq -r .public_url)
+# 2. Attach it (and a YouTube demo) to a project
+curl -b cookies.txt -X POST http://localhost:8000/api/v1/admin/projects \
+  -H "Content-Type: application/json" \
+  -d "{\"title\":\"AI Dashboard\",\"slug\":\"ai-dashboard\",\"published\":true,
+       \"cover_image\":\"$IMG\",
+       \"demo_video_url\":\"https://www.youtube.com/watch?v=...\",
+       \"demo_video_type\":\"youtube\"}"
+```
 
 ## API security / hardening
 
@@ -939,7 +978,8 @@ docker run --rm -p 8000:8000 \
 | `COOKIE_SECURE` | `false` | Set `true` in production (HTTPS) |
 | `STORAGE_BACKEND` | `local` | `local` now; `s3`/`r2` future |
 | `MEDIA_ROOT` | `./media` | Local storage directory |
-| `MEDIA_MAX_SIZE_BYTES` | `10485760` | Max upload size |
+| `MEDIA_MAX_SIZE_BYTES` | `10485760` | Max image/file upload size |
+| `MEDIA_MAX_VIDEO_SIZE_BYTES` | `104857600` | Max video upload size |
 | `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated allowed origins |
 | `TRUSTED_HOSTS` | *(empty)* | Comma-separated allowed Host values |
 

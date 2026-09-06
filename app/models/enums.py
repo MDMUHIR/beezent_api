@@ -25,3 +25,8 @@ class LeadStatus(StrEnum):
 class TeamMemberCategory(StrEnum):
     LEADERSHIP = "leadership"
     TALENT = "talent"
+
+
+class DemoVideoType(StrEnum):
+    YOUTUBE = "youtube"
+    UPLOAD = "upload"

@@ -163,13 +163,19 @@ def test_media_table_exists() -> None:
 
 
 def test_alembic_downgrade_and_upgrade_restores_latest_table() -> None:
+    async def _project_columns(session: AsyncSession) -> set[str]:
+        result = await session.execute(
+            text("SELECT column_name FROM information_schema.columns WHERE table_name = 'projects'")
+        )
+        return {row[0] for row in result}
+
     config = Config(str(BASE_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BASE_DIR / "migrations"))
     try:
         command.downgrade(config, "-1")
-        tables_without_media = run_db(_table_names)
-        assert "team_members" not in tables_without_media
+        columns_after_downgrade = run_db(_project_columns)
+        assert "demo_video_url" not in columns_after_downgrade
     finally:
         command.upgrade(config, "head")
-    tables = run_db(_table_names)
-    assert "team_members" in tables
+    columns = run_db(_project_columns)
+    assert "demo_video_url" in columns

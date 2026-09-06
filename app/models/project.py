@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.enums import ProjectStatus
+from app.models.enums import DemoVideoType, ProjectStatus
 from app.models.project_category import project_category_links
 
 if TYPE_CHECKING:
@@ -46,6 +46,16 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     cover_image: Mapped[str | None] = mapped_column(String(500), nullable=True)
     live_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     github_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    demo_video_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    demo_video_type: Mapped[DemoVideoType | None] = mapped_column(
+        Enum(
+            DemoVideoType,
+            native_enum=False,
+            length=20,
+            values_callable=lambda enum: [member.value for member in enum],
+        ),
+        nullable=True,
+    )
     technologies: Mapped[list[Any]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'"), nullable=False
     )

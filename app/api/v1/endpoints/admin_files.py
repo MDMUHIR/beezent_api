@@ -100,7 +100,13 @@ async def upload_media(
             ) from None
 
     content = await file.read()
-    if len(content) > get_settings().media_max_size_bytes:
+    settings = get_settings()
+    max_size = (
+        settings.media_max_video_size_bytes
+        if mime_type.startswith("video/")
+        else settings.media_max_size_bytes
+    )
+    if len(content) > max_size:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="File is too large",
