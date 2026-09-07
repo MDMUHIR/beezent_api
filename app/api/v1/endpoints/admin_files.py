@@ -1,37 +1,18 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    Query,
-    Response,
-    UploadFile,
-    status,
-)
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import require_staff
 from app.api.v1.endpoints.common import get_object_or_404, paginate
-from app.core.config import get_settings
 from app.core.database import get_session
 from app.models import Media, User
 from app.schemas import MediaAdmin, MediaMetadataUpdate, PaginatedResponse
-from app.services.media import delete_media, resolve_upload, store_media
+from app.services.media import delete_media
 
 router = APIRouter(prefix="/admin/files", tags=["admin-files"])
-
-
-def _safe_original_name(filename: str | None) -> str:
-    """Strip path components and control characters from a client filename."""
-    if not filename:
-        return "file"
-    name = filename.replace("\\", "/").rsplit("/", 1)[-1]
-    name = name.replace("\x00", "").strip()
-    return (name or "file")[:255]
 
 
 @router.get("", response_model=PaginatedResponse[MediaAdmin])
@@ -73,44 +54,6 @@ async def list_media(
         "page_size": page_size,
         "pages": pages,
     }
-
-
-@router.post("", response_model=MediaAdmin, status_code=status.HTTP_201_CREATED)
-async def upload_media(
-    file: UploadFile = File(...),
-    folder: str | None = Form(None, max_length=100),
-    alt_text: str | None = Form(None, max_length=500),
-    session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(require_staff),
-) -> Media:
-    settings = get_settings()
-    content = await file.read()
-    max_size = (
-        settings.media_max_video_size_bytes
-        if (file.content_type or "").lower().startswith("video/")
-        else settings.media_max_size_bytes
-    )
-    inspected, storage_key, folder, alt_text = resolve_upload(
-        mime_type=file.content_type,
-        folder=folder,
-        alt_text=alt_text,
-        max_size=max_size,
-        content=content,
-    )
-
-    media = await store_media(
-        session,
-        original_name=_safe_original_name(file.filename),
-        mime_type=(file.content_type or "").lower().strip(),
-        inspected=inspected,
-        storage_key=storage_key,
-        size=len(content),
-        content=content,
-        folder=folder,
-        alt_text=alt_text,
-        uploaded_by=current_user.id,
-    )
-    return media
 
 
 @router.get("/{media_id}", response_model=MediaAdmin)

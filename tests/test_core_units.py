@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.api.v1.endpoints.admin_files import _safe_original_name
 from app.api.v1.endpoints.common import integrity_error_response
 from app.core.security import generate_session_token, hash_session_token
 from app.core.storage import (
@@ -15,6 +14,7 @@ from app.core.storage import (
     get_storage,
 )
 from app.schemas.files import normalize_folder
+from app.services.entity_upload import safe_original_name
 from tests import media_fixtures
 
 HEX_UUID = re.compile(r"^[0-9a-f]{32}$")
@@ -135,21 +135,21 @@ def test_get_storage_unknown_backend_raises(monkeypatch) -> None:
 # Filename sanitization
 # --------------------------------------------------------------------------- #
 def test_safe_original_name_strips_paths() -> None:
-    assert _safe_original_name("../../etc/passwd.png") == "passwd.png"
-    assert _safe_original_name("C:\\Users\\x\\file.jpg") == "file.jpg"
-    assert _safe_original_name("/absolute/path/x.gif") == "x.gif"
+    assert safe_original_name("../../etc/passwd.png") == "passwd.png"
+    assert safe_original_name("C:\\Users\\x\\file.jpg") == "file.jpg"
+    assert safe_original_name("/absolute/path/x.gif") == "x.gif"
 
 
 def test_safe_original_name_strips_nul_and_truncates() -> None:
-    assert _safe_original_name("a\x00b.png") == "ab.png"
+    assert safe_original_name("a\x00b.png") == "ab.png"
     long_name = "x" * 300 + ".png"
-    assert len(_safe_original_name(long_name)) == 255
+    assert len(safe_original_name(long_name)) == 255
 
 
 def test_safe_original_name_default_and_blank() -> None:
-    assert _safe_original_name(None) == "file"
-    assert _safe_original_name("") == "file"
-    assert _safe_original_name("   ") == "file"
+    assert safe_original_name(None) == "file"
+    assert safe_original_name("") == "file"
+    assert safe_original_name("   ") == "file"
 
 
 # --------------------------------------------------------------------------- #

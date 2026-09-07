@@ -1,11 +1,14 @@
 import asyncio
 import uuid
+from pathlib import Path
 
 import asyncpg
 from sqlalchemy.engine import make_url
 
 from app.core.config import get_settings
+from app.models import Media
 from tests import media_fixtures
+from tests._db import run_db
 
 
 def _db_rows(sql: str, *args: object) -> list[asyncpg.Record]:
@@ -45,9 +48,27 @@ def _login(client, email: str = "staff@example.com", role: str = "staff") -> Non
 
 
 def _upload_media(client, *, mime: str, content: bytes, filename: str) -> str:
-    response = client.post("/api/v1/admin/files", files={"file": (filename, content, mime)})
-    assert response.status_code == 201, response.text
-    return response.json()["id"]
+    """Seed a media record directly (the generic upload endpoint was removed in
+    favor of entity-scoped uploads). Returns the media id."""
+    is_video = mime.startswith("video/")
+    media = Media(
+        original_name=filename,
+        storage_key=filename,
+        mime_type=mime,
+        media_type="video" if is_video else "image",
+        size=len(content),
+        width=None if is_video else 16,
+        height=None if is_video else 9,
+    )
+
+    async def insert(session) -> None:
+        session.add(media)
+        await session.commit()
+        await session.refresh(media)
+
+    run_db(insert)
+    (Path(get_settings().media_root) / filename).write_bytes(content)
+    return str(media.id)
 
 
 # --------------------------------------------------------------------------- #

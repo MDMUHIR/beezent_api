@@ -1,7 +1,17 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +27,12 @@ from app.core.database import get_session
 from app.models import Project, ProjectCategory, User
 from app.schemas import PaginatedResponse, ProjectAdmin, ProjectCreate, ProjectUpdate
 from app.services.cms_media import apply_demo_video_media, apply_image_media, pop_media_fields
+from app.services.entity_upload import (
+    attach_uploaded_image,
+    attach_uploaded_video,
+    parse_payload,
+    rollback_media,
+)
 
 router = APIRouter(prefix="/admin/projects", tags=["admin-projects"])
 
@@ -117,6 +133,106 @@ async def get_project(
     _: User = Depends(require_staff),
 ) -> Project:
     return await get_object_or_404(session, Project, project_id)
+
+
+@router.post("/upload", response_model=ProjectAdmin, status_code=status.HTTP_201_CREATED)
+async def create_project_with_files(
+    payload: str = Form(...),
+    cover_file: UploadFile | None = File(None),
+    demo_video_file: UploadFile | None = File(None),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_staff),
+) -> Project:
+    """Create a project, optionally uploading the cover photo and/or demo video
+    in the same request. The files are stored to media storage and linked to
+    the project automatically."""
+    body = parse_payload(ProjectCreate, payload)
+    if await slug_exists(session, Project, body.slug):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Slug '{body.slug}' is already in use",
+        )
+    data = body.model_dump(exclude={"category_ids"}, exclude_unset=True)
+    project = Project(**data)
+    if body.category_ids:
+        project.categories = await _resolve_categories(session, body.category_ids)
+    created: list = []
+    if cover_file is not None:
+        created.append(
+            await attach_uploaded_image(
+                session,
+                current_user,
+                project,
+                cover_file,
+                fk_attr="cover_media_id",
+                rel_attr="cover_media",
+                url_attr="cover_image",
+            )
+        )
+    if demo_video_file is not None:
+        created.append(await attach_uploaded_video(session, current_user, project, demo_video_file))
+    session.add(project)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        await rollback_media(session, created)
+        raise integrity_error_response(exc) from None
+    await session.refresh(project)
+    return project
+
+
+@router.patch("/{project_id}/upload", response_model=ProjectAdmin)
+async def update_project_with_files(
+    project_id: UUID,
+    payload: str = Form(...),
+    cover_file: UploadFile | None = File(None),
+    demo_video_file: UploadFile | None = File(None),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_staff),
+) -> Project:
+    """Update a project, optionally uploading a new cover photo and/or demo video."""
+    project = await get_object_or_404(session, Project, project_id)
+    body = parse_payload(ProjectUpdate, payload)
+    data = body.model_dump(exclude_unset=True)
+    if "slug" in data and data["slug"] is not None:
+        if await slug_exists(session, Project, data["slug"], exclude_id=project.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Slug '{data['slug']}' is already in use",
+            )
+    categories = None
+    if "category_ids" in data:
+        ids = data.pop("category_ids")
+        categories = await _resolve_categories(session, ids) if ids else []
+    created: list = []
+    await _apply_media(session, project, data)
+    if cover_file is not None:
+        created.append(
+            await attach_uploaded_image(
+                session,
+                current_user,
+                project,
+                cover_file,
+                fk_attr="cover_media_id",
+                rel_attr="cover_media",
+                url_attr="cover_image",
+            )
+        )
+    if demo_video_file is not None:
+        created.append(await attach_uploaded_video(session, current_user, project, demo_video_file))
+    for key, value in data.items():
+        setattr(project, key, value)
+    if categories is not None:
+        project.categories = categories
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        await rollback_media(session, created)
+        raise integrity_error_response(exc) from None
+    await session.refresh(project)
+    return project
 
 
 @router.patch("/{project_id}", response_model=ProjectAdmin)
