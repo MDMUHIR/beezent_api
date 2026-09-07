@@ -63,6 +63,4 @@ def downgrade() -> None:
     op.drop_column("solutions", "image_url")
     op.drop_column("projects", "demo_video_type")
     op.drop_column("projects", "demo_video_url")
-    sa.Enum(name="demovideotype", native_enum=False, length=20).drop(
-        op.get_bind(), checkfirst=True
-    )
+    sa.Enum(name="demovideotype", native_enum=False, length=20).drop(op.get_bind(), checkfirst=True)

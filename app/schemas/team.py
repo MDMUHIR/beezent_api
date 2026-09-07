@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import TeamMemberCategory
 from app.schemas.cms import SlugStr
+from app.schemas.files import MediaPublic
 
 
 class TeamMemberBase(BaseModel):
@@ -13,6 +14,7 @@ class TeamMemberBase(BaseModel):
     role: str = Field(min_length=1, max_length=255)
     bio: str | None = None
     avatar_url: str | None = Field(default=None, max_length=500)
+    avatar_media_id: UUID | None = None
     category: TeamMemberCategory = TeamMemberCategory.TALENT
     featured: bool = False
     published: bool = False
@@ -28,6 +30,7 @@ class TeamMemberPublic(BaseModel):
     role: str
     bio: str | None = None
     avatar_url: str | None = None
+    avatar_media: MediaPublic | None = None
     category: TeamMemberCategory
     featured: bool
     sort_order: int
@@ -41,6 +44,7 @@ class TeamMemberAdmin(TeamMemberBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    avatar_media: MediaPublic | None = None
 
 
 class TeamMemberCreate(TeamMemberBase):
@@ -53,6 +57,7 @@ class TeamMemberUpdate(BaseModel):
     role: str | None = Field(default=None, min_length=1, max_length=255)
     bio: str | None = None
     avatar_url: str | None = Field(default=None, max_length=500)
+    avatar_media_id: UUID | None = None
     category: TeamMemberCategory | None = None
     featured: bool | None = None
     published: bool | None = None

@@ -6,24 +6,21 @@ from fastapi import (
     Depends,
     File,
     Form,
-    HTTPException,
     Query,
     Response,
     UploadFile,
     status,
 )
 from sqlalchemy import or_, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import require_staff
 from app.api.v1.endpoints.common import get_object_or_404, paginate
 from app.core.config import get_settings
 from app.core.database import get_session
-from app.core.storage import ALLOWED_MIME_TYPES, build_storage_key, get_storage
 from app.models import Media, User
 from app.schemas import MediaAdmin, MediaMetadataUpdate, PaginatedResponse
-from app.schemas.files import normalize_folder
+from app.services.media import delete_media, resolve_upload, store_media
 
 router = APIRouter(prefix="/admin/files", tags=["admin-files"])
 
@@ -42,6 +39,7 @@ async def list_media(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     folder: str | None = Query(None, max_length=100),
+    media_type: Literal["image", "video", "document"] | None = Query(None),
     mime_type: str | None = Query(None, max_length=100),
     q: str | None = Query(None, max_length=100),
     sort: Literal["created_at", "size", "original_name"] = "created_at",
@@ -52,6 +50,8 @@ async def list_media(
     stmt = select(Media)
     if folder:
         stmt = stmt.where(Media.folder == folder)
+    if media_type:
+        stmt = stmt.where(Media.media_type == media_type)
     if mime_type:
         stmt = stmt.where(Media.mime_type == mime_type)
     if q:
@@ -83,60 +83,33 @@ async def upload_media(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(require_staff),
 ) -> Media:
-    mime_type = (file.content_type or "").lower()
-    if mime_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Unsupported file type",
-        )
-
-    if folder is not None:
-        try:
-            folder = normalize_folder(folder)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Invalid folder name",
-            ) from None
-
-    content = await file.read()
     settings = get_settings()
+    content = await file.read()
     max_size = (
         settings.media_max_video_size_bytes
-        if mime_type.startswith("video/")
+        if (file.content_type or "").lower().startswith("video/")
         else settings.media_max_size_bytes
     )
-    if len(content) > max_size:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="File is too large",
-        )
-
-    storage = get_storage()
-    storage_key = build_storage_key(mime_type)
-    result = await storage.save(storage_key, content)
-
-    media = Media(
-        original_name=_safe_original_name(file.filename),
-        storage_key=result.storage_key,
-        public_url=result.public_url,
-        mime_type=mime_type,
-        size=len(content),
-        alt_text=alt_text,
+    inspected, storage_key, folder, alt_text = resolve_upload(
+        mime_type=file.content_type,
         folder=folder,
+        alt_text=alt_text,
+        max_size=max_size,
+        content=content,
+    )
+
+    media = await store_media(
+        session,
+        original_name=_safe_original_name(file.filename),
+        mime_type=(file.content_type or "").lower().strip(),
+        inspected=inspected,
+        storage_key=storage_key,
+        size=len(content),
+        content=content,
+        folder=folder,
+        alt_text=alt_text,
         uploaded_by=current_user.id,
     )
-    session.add(media)
-    try:
-        await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        await storage.delete(storage_key)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not store the file",
-        ) from None
-    await session.refresh(media)
     return media
 
 
@@ -166,13 +139,11 @@ async def update_media(
 
 
 @router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_media(
+async def delete_media_endpoint(
     media_id: UUID,
     session: AsyncSession = Depends(get_session),
     _: User = Depends(require_staff),
 ) -> Response:
     media = await get_object_or_404(session, Media, media_id)
-    await get_storage().delete(media.storage_key)
-    await session.delete(media)
-    await session.commit()
+    await delete_media(session, media)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

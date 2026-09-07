@@ -19,17 +19,47 @@ def normalize_folder(value: str | None) -> str | None:
     return value
 
 
+class MediaPublic(BaseModel):
+    """Public delivery representation of a media object.
+
+    Exposed nested inside CMS responses. Never includes internal fields such
+    as storage keys, uploader identity, or database timestamps.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    url: str
+    mime_type: str
+    media_type: str
+    size: int
+    width: int | None = None
+    height: int | None = None
+    duration_seconds: int | None = None
+    alt_text: str | None = None
+
+
 class MediaAdmin(BaseModel):
+    """Admin/staff representation of a media record.
+
+    `public_url` and `url` are the same delivery URL; `url` is the canonical,
+    frontend-friendly field and `public_url` is kept for backward compatibility
+    with earlier clients.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     original_name: str
     storage_key: str
     public_url: str
+    url: str
     mime_type: str
+    media_type: str
     size: int
     width: int | None = None
     height: int | None = None
+    duration_seconds: int | None = None
     alt_text: str | None = None
     folder: str | None = None
     uploaded_by: UUID | None = None

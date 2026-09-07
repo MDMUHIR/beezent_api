@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.media import Media
     from app.models.project import Project
 
 
@@ -23,6 +24,9 @@ class CaseStudy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    image_media_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     challenge: Mapped[str | None] = mapped_column(Text, nullable=True)
     solution: Mapped[str | None] = mapped_column(Text, nullable=True)
     implementation: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -41,3 +45,5 @@ class CaseStudy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     seo_description: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     project: Mapped[Project | None] = relationship(back_populates="case_studies")
+
+    image_media: Mapped[Media | None] = relationship(foreign_keys=[image_media_id], lazy="selectin")

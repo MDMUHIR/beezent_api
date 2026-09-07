@@ -16,8 +16,30 @@ from app.api.v1.endpoints.common import (
 from app.core.database import get_session
 from app.models import Solution, SolutionCategory, User
 from app.schemas import PaginatedResponse, SolutionAdmin, SolutionCreate, SolutionUpdate
+from app.services.cms_media import apply_demo_video_media, apply_image_media, pop_media_fields
 
 router = APIRouter(prefix="/admin/solutions", tags=["admin-solutions"])
+
+_MEDIA_FIELDS = ("image_media_id", "demo_video_media_id")
+
+
+async def _apply_media(session: AsyncSession, solution: Solution, data: dict) -> None:
+    media_values = pop_media_fields(data, list(_MEDIA_FIELDS))
+    if "image_media_id" in media_values:
+        await apply_image_media(
+            session,
+            solution,
+            value=media_values["image_media_id"],
+            data=data,
+            fk_attr="image_media_id",
+            rel_attr="image_media",
+            url_attr="image_url",
+            field_name="image_media",
+        )
+    if "demo_video_media_id" in media_values:
+        await apply_demo_video_media(
+            session, solution, value=media_values["demo_video_media_id"], data=data
+        )
 
 
 async def _resolve_categories(session: AsyncSession, ids: list[UUID]) -> list[SolutionCategory]:
@@ -73,8 +95,9 @@ async def create_solution(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Slug '{payload.slug}' is already in use",
         )
-    data = payload.model_dump(exclude={"category_ids"})
+    data = payload.model_dump(exclude={"category_ids"}, exclude_unset=True)
     solution = Solution(**data)
+    await _apply_media(session, solution, data)
     if payload.category_ids:
         solution.categories = await _resolve_categories(session, payload.category_ids)
     session.add(solution)
@@ -115,6 +138,7 @@ async def update_solution(
     if "category_ids" in data:
         ids = data.pop("category_ids")
         categories = await _resolve_categories(session, ids) if ids else []
+    await _apply_media(session, solution, data)
     for key, value in data.items():
         setattr(solution, key, value)
     if categories is not None:

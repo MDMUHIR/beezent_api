@@ -21,6 +21,7 @@ from app.schemas import (
     TeamMemberCreate,
     TeamMemberUpdate,
 )
+from app.services.cms_media import apply_image_media, pop_media_fields
 
 router = APIRouter(prefix="/admin/team-members", tags=["admin-team-members"])
 
@@ -72,7 +73,20 @@ async def create_team_member(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Slug '{payload.slug}' is already in use",
         )
-    member = TeamMember(**payload.model_dump())
+    data = payload.model_dump(exclude_unset=True)
+    media_values = pop_media_fields(data, ["avatar_media_id"])
+    member = TeamMember(**data)
+    if "avatar_media_id" in media_values:
+        await apply_image_media(
+            session,
+            member,
+            value=media_values["avatar_media_id"],
+            data=data,
+            fk_attr="avatar_media_id",
+            rel_attr="avatar_media",
+            url_attr="avatar_url",
+            field_name="avatar_media",
+        )
     session.add(member)
     try:
         await session.commit()
@@ -107,6 +121,18 @@ async def update_team_member(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Slug '{data['slug']}' is already in use",
             )
+    media_values = pop_media_fields(data, ["avatar_media_id"])
+    if "avatar_media_id" in media_values:
+        await apply_image_media(
+            session,
+            member,
+            value=media_values["avatar_media_id"],
+            data=data,
+            fk_attr="avatar_media_id",
+            rel_attr="avatar_media",
+            url_attr="avatar_url",
+            field_name="avatar_media",
+        )
     for key, value in data.items():
         setattr(member, key, value)
     try:

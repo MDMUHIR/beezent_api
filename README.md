@@ -512,7 +512,8 @@ Response (`TeamMemberPublic`):
 | `slug` | string | Unique URL identifier |
 | `role` | string | Designation (e.g. "Chief Executive Officer") |
 | `bio` | string? | Short biography |
-| `avatar_url` | string? | Photo URL (uploaded media) |
+| `avatar_url` | string? | Legacy avatar URL (deprecated; mirror of the linked media) |
+| `avatar_media` | object? | Nested media: `{id, url, mime_type, media_type, width, height, alt_text}` |
 | `category` | enum | `leadership` or `talent` |
 | `featured` | bool | Highlighted member |
 | `sort_order` | int | Display ordering |
@@ -538,6 +539,7 @@ Create/update body:
   "category": "leadership",
   "bio": "Leads strategy and growth.",
   "avatar_url": "/media/abc123.png",
+  "avatar_media_id": "uuid",
   "featured": true,
   "published": true,
   "sort_order": 1
@@ -574,7 +576,8 @@ noted):
 | `project_type` | string? | Project only |
 | `status` | enum | Project only: `active` / `completed` / `archived` |
 | `featured` | bool | Highlighted in listings |
-| `cover_image` | string? | Project only (media URL) |
+| `cover_image` | string? | Legacy cover URL (deprecated; mirror of `cover_media`) |
+| `cover_media` | object? | Project only: nested media `{id, url, mime_type, media_type, width, height, alt_text}` |
 | `live_url` / `github_url` | string? | Project only |
 | `technologies` | array | List of tech tags |
 | `results` | array | List of outcome highlights |
@@ -711,12 +714,18 @@ change. `id`, `created_at`, and `updated_at` are never editable.
 
 ## Media / File Storage
 
-Website media is stored in a **storage backend**, never as binaries in
-PostgreSQL. The database holds only metadata/references. The current
-implementation ships a clean `StorageBackend` interface plus a **local
-development adapter** (`STORAGE_BACKEND=local`); production object storage
-(Cloudflare R2 / S3-compatible) plugs into the same interface without changing
-the API or model.
+Media is a **first-class domain entity**. Binary content is never stored in
+PostgreSQL — the database holds metadata only — and it is persisted through a
+clean `StorageBackend` abstraction (a **local development adapter** today,
+Cloudflare R2 / S3-compatible object storage in production behind the same
+interface).
+
+The `Media` row is the canonical identity: CMS content references it through
+**Media UUID foreign keys** (`cover_media_id`, `image_media_id`,
+`avatar_media_id`, `demo_video_media_id`), not through arbitrary URL strings.
+A public URL is a *delivery representation* derived at runtime from the storage
+key (`storage_key` is the storage identity); the backend never persists URLs,
+so changing storage/CDN configuration never requires rewriting database rows.
 
 ### Endpoints
 
@@ -725,34 +734,96 @@ the API or model.
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `POST` | `/api/v1/admin/files` | Upload media (multipart form) |
-| `GET` | `/api/v1/admin/files` | Paginated list; params `page`, `page_size`, `folder`, `mime_type`, `q`, `sort`, `order` |
+| `GET` | `/api/v1/admin/files` | Paginated list; params `page`, `page_size`, `folder`, `media_type`, `mime_type`, `q`, `sort`, `order` |
 | `GET` | `/api/v1/admin/files/{id}` | Media metadata detail |
 | `PATCH` | `/api/v1/admin/files/{id}` | Update `alt_text` / `folder` metadata only |
-| `DELETE` | `/api/v1/admin/files/{id}` | Delete the object + metadata (204) |
+| `DELETE` | `/api/v1/admin/files/{id}` | Delete media (204, or `409` when referenced by CMS content) |
 
 Upload form fields: `file` (required), `folder` (optional), `alt_text`
 (optional). In development the file is written under `MEDIA_ROOT` and served at
-its `public_url` (`/media/{storage_key}`); the mount is only enabled for the
-local backend.
+its derived URL (`/media/{storage_key}`); the static mount is only enabled for
+the local backend.
+
+`MediaAdmin` response (used by all media endpoints):
+
+```json
+{
+  "id": "uuid",
+  "original_name": "hero.webp",
+  "storage_key": "d41d8cd98f00b204e9800998ecf8427e.webp",
+  "public_url": "/media/d41d8cd98f00b204e9800998ecf8427e.webp",
+  "url": "/media/d41d8cd98f00b204e9800998ecf8427e.webp",
+  "mime_type": "image/webp",
+  "media_type": "image",
+  "size": 183421,
+  "width": 1920,
+  "height": 1080,
+  "duration_seconds": null,
+  "alt_text": "Beezents AI automation dashboard",
+  "folder": "projects",
+  "uploaded_by": "uuid",
+  "created_at": "2026-09-01T12:00:00Z",
+  "updated_at": "2026-09-01T12:00:00Z"
+}
+```
+
+`public_url` and `url` are the same derived delivery URL (`url` is the
+canonical field, `public_url` is kept for backward compatibility). No internal
+filesystem paths or storage configuration are ever exposed.
 
 ### Security behavior
 
 - **Allowed MIME types**: `image/jpeg`, `image/png`, `image/gif`, `image/webp`,
-  `image/avif`, `image/svg+xml`, `application/pdf`, and direct video uploads
-  `video/mp4`, `video/webm`, `video/quicktime` (`.mov`), `video/ogg` (`.ogv`).
-  Anything else → `422`.
+  `image/avif`, `application/pdf`, and direct video uploads `video/mp4`,
+  `video/webm`, `video/quicktime` (`.mov`), `video/ogg` (`.ogv`).
+  `image/svg+xml` is **not accepted** (SVG can carry active scripts; see the
+  [SVG policy](#svg-policy)). Anything else → `422`.
+- **Content signature validation**: the client-declared `Content-Type` is not
+  trusted. Images are decoded with Pillow (the decoded format must match the
+  declared type, and `width`/`height` are extracted); PDFs must start with
+  `%PDF-`; videos must carry the correct container magic bytes (ISO BMFF
+  `ftyp`, WebM EBML, or Ogg). Mismatched content → `422`.
 - **Size limits**: `MEDIA_MAX_SIZE_BYTES` (default 10 MiB) for images/files and
   `MEDIA_MAX_VIDEO_SIZE_BYTES` (default 100 MiB) for videos; larger uploads →
   `413`.
 - **Storage naming is UUID-based**: `storage_key = {uuid}{ext}`, where the
   extension comes from the validated MIME type — never from user input. Client
   filenames are sanitized to a bare basename and stored only as `original_name`
-  metadata; user input never becomes a filesystem path.
+  metadata; user input never becomes a filesystem path. Files are written
+  atomically (temp file + rename).
 - **Folder names** must match `^[a-z0-9_-]{1,100}$` (prevents path traversal).
 - **Uploader tracking**: `uploaded_by` records the staff/admin user (FK, `ON
   DELETE SET NULL`).
+- **Safe deletion**: deleting media that is still referenced by a Project,
+  Solution, Case Study, or Team Member returns `409 Conflict` with the list of
+  references. Media is never cascade-deleted from CMS content, and deleting
+  media never silently breaks a CMS reference.
+- **Mass assignment**: `PATCH` accepts only `alt_text`/`folder`. `storage_key`,
+  `size`, `mime_type`, timestamps, and uploader can never be modified through
+  the API.
 - **No PII exposure**: metadata responses are staff/admin-only; no public media
   API exists.
+
+### Media lifecycle / ordering
+
+Upload flow: validate → read content → verify signature + extract metadata →
+generate storage key → write to storage → insert metadata row → commit. If the
+database commit fails after a storage write, the object is deleted best-effort
+(orphan cleanup). If storage fails, no metadata row is created.
+
+Delete flow: check CMS references (409 if any) → delete the storage object →
+delete the metadata row. If the row deletion fails after the object is removed,
+the metadata row remains pointing at a missing object — safer than leaving an
+orphaned object with no database record. Storage and PostgreSQL are *not*
+transactionally atomic; this is a documented best-effort design.
+
+### SVG policy
+
+**Option A (adopted): SVG is not accepted for uploads.** The marketing website
+does not require user-uploaded SVG, and SVG can contain active script content.
+If SVG support is ever required it must be delivered through a separate asset
+origin/CDN with sanitization, safe headers, and no inline trusted rendering —
+never served as trusted application HTML.
 
 ### Configuration
 
@@ -763,42 +834,74 @@ local backend.
 | `MEDIA_MAX_SIZE_BYTES` | `10485760` | Max image/file upload size (10 MiB) |
 | `MEDIA_MAX_VIDEO_SIZE_BYTES` | `104857600` | Max video upload size (100 MiB) |
 
-The `media` table columns: `original_name`, `storage_key` (unique), `public_url`,
-`mime_type`, `size`, `width`, `height`, `alt_text`, `folder`, `uploaded_by`,
-`created_at`, `updated_at`. `width`/`height` are reserved for future
-image-dimension extraction and are currently `NULL`.
+The `media` table columns: `original_name`, `storage_key` (unique), `mime_type`,
+`media_type` (`image` / `video` / `document`), `size`, `width`, `height`,
+`duration_seconds`, `alt_text`, `folder`, `uploaded_by`, `created_at`,
+`updated_at`. `width`/`height` are extracted for images at upload time.
+`duration_seconds` is reserved and currently always `NULL` (video duration
+extraction is intentionally deferred — see [Known limitations](#known-limitations)).
 
-### Photos & demo videos on content
+### Media on content (UUID relationships)
 
-Content models reference uploaded media by URL (the media's `public_url`, e.g.
-`/media/<key>.png`). Upload the file first via `POST /api/v1/admin/files`, then
-set the field to the returned `public_url` in the content create/update body.
+CMS content references media through **UUID foreign keys** (`ON DELETE SET
+NULL`). The legacy string URL columns (`cover_image`, `image_url`,
+`avatar_url`, `demo_video_url`) are kept and **automatically mirrored** from
+the linked media so older clients keep working.
 
-| Resource | Photo field | Demo video fields |
+| Resource | Image FK field | Demo video FK field |
 | --- | --- | --- |
-| projects | `cover_image` | `demo_video_url` + `demo_video_type` |
-| solutions | `image_url` | `demo_video_url` + `demo_video_type` |
-| case-studies | `image_url` | — |
-| team-members | `avatar_url` | — |
+| projects | `cover_media_id` | `demo_video_media_id` |
+| solutions | `image_media_id` | `demo_video_media_id` |
+| case-studies | `image_media_id` | — |
+| team-members | `avatar_media_id` | — |
 
-**Demo video** (`projects`, `solutions`) supports both a direct upload and a
-YouTube link via `demo_video_type`:
+Admin create/update payloads accept the FK fields (a UUID links the media and
+mirrors the legacy URL; explicit `null` unlinks and clears the URL). Public CMS
+responses embed a structured media object instead of raw strings, e.g.:
 
-- `demo_video_type: "youtube"` → `demo_video_url` is a YouTube URL (e.g.
-  `https://www.youtube.com/watch?v=...`).
-- `demo_video_type: "upload"` → `demo_video_url` is the uploaded video's
-  `public_url` (`/media/<key>.mp4`). Upload videos through the media API
-  (`video/mp4`, `video/webm`, `video/mov`, `video/ogv`).
+```json
+{
+  "slug": "ai-sales-agent",
+  "title": "AI Sales Agent",
+  "cover_media": {
+    "id": "uuid",
+    "url": "/media/...",
+    "mime_type": "image/webp",
+    "media_type": "image",
+    "size": 183421,
+    "width": 1920,
+    "height": 1080,
+    "duration_seconds": null,
+    "alt_text": "AI sales agent dashboard"
+  }
+}
+```
+
+The legacy string fields (`cover_image`, `image_url`, `avatar_url`,
+`demo_video_url`) remain in public responses for backward compatibility but are
+deprecated in favor of the nested `cover_media` / `image_media` / `avatar_media`
+/ `demo_video` objects. Internal fields (`storage_key`, media FKs, uploader,
+timestamps) are never exposed publicly.
+
+**Demo video** (`projects`, `solutions`) supports both an uploaded video and an
+external YouTube link — two distinct concepts, never conflated:
+
+- **Uploaded video**: set `demo_video_media_id` to a `Media` row whose
+  `media_type` is `video`. The API mirrors `demo_video_url` and forces
+  `demo_video_type = "upload"`.
+- **External video**: keep `demo_video_media_id` unset and provide
+  `demo_video_url` (a YouTube URL) with `demo_video_type = "youtube"`. External
+  videos are never stored as Media records.
 
 ```sh
 # 1. Upload a photo
 IMG=$(curl -b cookies.txt -X POST http://localhost:8000/api/v1/admin/files \
-  -F "file=@./hero.png" | jq -r .public_url)
+  -F "file=@./hero.png" | jq -r .id)
 # 2. Attach it (and a YouTube demo) to a project
 curl -b cookies.txt -X POST http://localhost:8000/api/v1/admin/projects \
   -H "Content-Type: application/json" \
   -d "{\"title\":\"AI Dashboard\",\"slug\":\"ai-dashboard\",\"published\":true,
-       \"cover_image\":\"$IMG\",
+       \"cover_media_id\":\"$IMG\",
        \"demo_video_url\":\"https://www.youtube.com/watch?v=...\",
        \"demo_video_type\":\"youtube\"}"
 ```
@@ -848,9 +951,10 @@ Defense-in-depth applied across the API:
   public launch: per-IP throttling on `/auth/*` and `/leads`.
 - **CSP header** not set (a JSON API doesn't render HTML; revisit if the API ever
   serves HTML).
-- Uploaded **SVG** is served inline and can execute scripts when opened directly;
-  production should serve media from a CDN/object storage with safe headers (or
-  remove SVG from the allowlist).
+- Uploaded media is served by the local development mount as-is; production
+  should serve media from a CDN/object storage with safe headers. SVG is **not
+  accepted** for uploads, so the inline-SVG script risk is eliminated rather
+  than mitigated.
 
 ## Alembic migrations
 

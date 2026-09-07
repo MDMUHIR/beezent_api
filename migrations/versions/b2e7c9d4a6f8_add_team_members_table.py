@@ -55,9 +55,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.CheckConstraint(
-            "category IN ('leadership', 'talent')", name="ck_team_members_category"
-        ),
+        sa.CheckConstraint("category IN ('leadership', 'talent')", name="ck_team_members_category"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_team_members_published"), "team_members", ["published"], unique=False)

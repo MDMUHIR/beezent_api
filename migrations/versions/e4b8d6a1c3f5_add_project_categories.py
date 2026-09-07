@@ -43,9 +43,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("name"),
     )
-    op.create_index(
-        op.f("ix_project_categories_slug"), "project_categories", ["slug"], unique=True
-    )
+    op.create_index(op.f("ix_project_categories_slug"), "project_categories", ["slug"], unique=True)
     op.create_table(
         "project_category_links",
         sa.Column("project_id", sa.Uuid(), nullable=False),
@@ -64,9 +62,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(
-        "ix_project_category_links_category_id", table_name="project_category_links"
-    )
+    op.drop_index("ix_project_category_links_category_id", table_name="project_category_links")
     op.drop_table("project_category_links")
     op.drop_index(op.f("ix_project_categories_slug"), table_name="project_categories")
     op.drop_table("project_categories")

@@ -17,6 +17,7 @@ from app.api.v1.endpoints.common import (
 from app.core.database import get_session
 from app.models import CaseStudy, Project, User
 from app.schemas import CaseStudyAdmin, CaseStudyCreate, CaseStudyUpdate, PaginatedResponse
+from app.services.cms_media import apply_image_media, pop_media_fields
 
 router = APIRouter(prefix="/admin/case-studies", tags=["admin-case-studies"])
 
@@ -61,7 +62,20 @@ async def create_case_study(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Slug '{payload.slug}' is already in use",
         )
-    case_study = CaseStudy(**payload.model_dump())
+    data = payload.model_dump(exclude_unset=True)
+    media_values = pop_media_fields(data, ["image_media_id"])
+    case_study = CaseStudy(**data)
+    if "image_media_id" in media_values:
+        await apply_image_media(
+            session,
+            case_study,
+            value=media_values["image_media_id"],
+            data=data,
+            fk_attr="image_media_id",
+            rel_attr="image_media",
+            url_attr="image_url",
+            field_name="image_media",
+        )
     session.add(case_study)
     try:
         await session.commit()
@@ -98,6 +112,18 @@ async def update_case_study(
             )
     if "project_id" in data and data["project_id"] is not None:
         await ensure_record_exists(session, Project, data["project_id"], field_name="project")
+    media_values = pop_media_fields(data, ["image_media_id"])
+    if "image_media_id" in media_values:
+        await apply_image_media(
+            session,
+            case_study,
+            value=media_values["image_media_id"],
+            data=data,
+            fk_attr="image_media_id",
+            rel_attr="image_media",
+            url_attr="image_url",
+            field_name="image_media",
+        )
     for key, value in data.items():
         setattr(case_study, key, value)
     try:

@@ -11,11 +11,11 @@ from app.core.security import generate_session_token, hash_session_token
 from app.core.storage import (
     ALLOWED_MIME_TYPES,
     LocalStorageBackend,
-    StorageResult,
     build_storage_key,
     get_storage,
 )
 from app.schemas.files import normalize_folder
+from tests import media_fixtures
 
 HEX_UUID = re.compile(r"^[0-9a-f]{32}$")
 
@@ -72,10 +72,10 @@ def test_build_storage_keys_are_unique() -> None:
     assert len(keys) == 100
 
 
-def test_storage_result_slots() -> None:
-    result = StorageResult(storage_key="abc.png", public_url="/media/abc.png")
-    assert result.storage_key == "abc.png"
-    assert result.public_url == "/media/abc.png"
+def test_storage_key_format_uses_uuid_and_extension() -> None:
+    key = build_storage_key("image/png")
+    assert HEX_UUID.fullmatch(key[:32])
+    assert key == f"{key[:32]}.png"
 
 
 # --------------------------------------------------------------------------- #
@@ -84,12 +84,11 @@ def test_storage_result_slots() -> None:
 def test_local_backend_save_and_public_url(tmp_path: Path) -> None:
     backend = LocalStorageBackend(tmp_path)
 
-    async def run() -> StorageResult:
-        return await backend.save("abc.png", b"data")
+    async def run() -> None:
+        await backend.save("abc.png", b"data")
 
-    result = asyncio.run(run())
+    asyncio.run(run())
     assert (tmp_path / "abc.png").read_bytes() == b"data"
-    assert result.public_url == "/media/abc.png"
     assert backend.public_url("abc.png") == "/media/abc.png"
 
 
@@ -182,3 +181,75 @@ def test_normalize_folder_valid(value) -> None:
 def test_normalize_folder_invalid(value) -> None:
     with pytest.raises(ValueError):
         normalize_folder(value)
+
+
+# --------------------------------------------------------------------------- #
+# Upload content validation (signature + metadata)
+# --------------------------------------------------------------------------- #
+def test_inspect_image_returns_dimensions() -> None:
+    from app.core.media_validation import inspect_upload
+
+    inspected = inspect_upload("image/png", media_fixtures.PNG)
+    assert inspected.media_type == "image"
+    assert inspected.width == 16
+    assert inspected.height == 9
+    assert inspected.duration_seconds is None
+
+
+@pytest.mark.parametrize(
+    "mime,content",
+    [
+        ("image/jpeg", media_fixtures.JPEG),
+        ("image/gif", media_fixtures.GIF),
+        ("image/webp", media_fixtures.WEBP),
+        ("image/avif", media_fixtures.AVIF),
+    ],
+)
+def test_inspect_valid_images_pass(mime, content) -> None:
+    from app.core.media_validation import inspect_upload
+
+    assert inspect_upload(mime, content).media_type == "image"
+
+
+@pytest.mark.parametrize(
+    "mime,content",
+    [
+        ("image/png", media_fixtures.JPEG),
+        ("image/jpeg", media_fixtures.PNG),
+        ("image/png", b"not-an-image"),
+        ("video/mp4", media_fixtures.PNG),
+        ("video/webm", b"junk"),
+        ("video/ogg", b"OggX" + b"\x00" * 8),
+        ("application/pdf", b"not a pdf"),
+    ],
+)
+def test_inspect_mismatched_content_raises(mime, content) -> None:
+    from app.core.media_validation import MediaValidationError, inspect_upload
+
+    with pytest.raises(MediaValidationError):
+        inspect_upload(mime, content)
+
+
+@pytest.mark.parametrize(
+    "mime,content",
+    [
+        ("video/mp4", media_fixtures.MP4),
+        ("video/quicktime", media_fixtures.MOV),
+        ("video/webm", media_fixtures.WEBM),
+        ("video/ogg", media_fixtures.OGV),
+    ],
+)
+def test_inspect_valid_video_signatures_pass(mime, content) -> None:
+    from app.core.media_validation import inspect_upload
+
+    inspected = inspect_upload(mime, content)
+    assert inspected.media_type == "video"
+    assert inspected.duration_seconds is None
+
+
+def test_media_type_from_mime() -> None:
+    from app.core.media_validation import media_type_from_mime
+
+    assert media_type_from_mime("image/png") == "image"
+    assert media_type_from_mime("video/mp4") == "video"
+    assert media_type_from_mime("application/pdf") == "document"

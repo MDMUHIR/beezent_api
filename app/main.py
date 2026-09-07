@@ -31,10 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await dispose_engine()
 
 
+# debug=False even when settings.debug is true: Starlette's debug mode makes
+# ServerErrorMiddleware return raw tracebacks to clients and bypasses the
+# installed safe-500 handler below. The project's design is that unhandled
+# exceptions are logged server-side (DEBUG log level when settings.debug) and
+# clients always receive a safe JSON 500 with no internals leaked.
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    debug=settings.debug,
+    debug=False,
     lifespan=lifespan,
 )
 

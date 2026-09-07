@@ -1,4 +1,6 @@
 import asyncio
+import os
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from uuid import uuid4
@@ -7,13 +9,14 @@ from app.core.config import get_settings
 
 # MIME types accepted for website media, mapped to their canonical extension.
 # The storage key extension is derived from this map, never from user input.
+# image/svg+xml is intentionally absent: SVG can carry active scripts and is
+# not required by the marketing site (see docs/phases/phase-08-file-media-storage.md).
 ALLOWED_MIME_TYPES: dict[str, str] = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/gif": ".gif",
     "image/webp": ".webp",
     "image/avif": ".avif",
-    "image/svg+xml": ".svg",
     "application/pdf": ".pdf",
     # Direct video uploads (e.g. demo videos for projects/solutions).
     "video/mp4": ".mp4",
@@ -22,15 +25,10 @@ ALLOWED_MIME_TYPES: dict[str, str] = {
     "video/ogg": ".ogv",
 }
 
-
-class StorageResult:
-    """Result of persisting a file: the unique key and its public URL."""
-
-    __slots__ = ("storage_key", "public_url")
-
-    def __init__(self, storage_key: str, public_url: str) -> None:
-        self.storage_key = storage_key
-        self.public_url = public_url
+# The application-level media category, stored on the Media row.
+MEDIA_TYPE_IMAGE = "image"
+MEDIA_TYPE_VIDEO = "video"
+MEDIA_TYPE_DOCUMENT = "document"
 
 
 class StorageBackend(ABC):
@@ -41,8 +39,8 @@ class StorageBackend(ABC):
     """
 
     @abstractmethod
-    async def save(self, storage_key: str, content: bytes) -> StorageResult:
-        """Persist `content` under `storage_key` and return the public result."""
+    async def save(self, storage_key: str, content: bytes) -> None:
+        """Persist `content` under `storage_key`."""
 
     @abstractmethod
     async def delete(self, storage_key: str) -> None:
@@ -50,7 +48,12 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def public_url(self, storage_key: str) -> str:
-        """Return the public URL for a storage key."""
+        """Return the public delivery URL for a storage key.
+
+        The URL is always derived from the storage key and the current storage
+        configuration, never persisted, so changing storage/CDN configuration
+        does not require rewriting database rows.
+        """
 
 
 class LocalStorageBackend(StorageBackend):
@@ -59,11 +62,23 @@ class LocalStorageBackend(StorageBackend):
     def __init__(self, root: Path) -> None:
         self.root = root
 
-    async def save(self, storage_key: str, content: bytes) -> StorageResult:
+    async def save(self, storage_key: str, content: bytes) -> None:
         path = self._resolve(storage_key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        await asyncio.to_thread(path.write_bytes, content)
-        return StorageResult(storage_key=storage_key, public_url=self.public_url(storage_key))
+        # Write atomically: write to a temp file in the same directory, then
+        # rename into place so a partial/failed write never leaves a corrupt
+        # object at the final storage key.
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".upload-")
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            await asyncio.to_thread(os.replace, tmp_name, path)
+        except BaseException:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+            raise
 
     async def delete(self, storage_key: str) -> None:
         path = self._resolve(storage_key)

@@ -8,6 +8,7 @@ from sqlalchemy.engine import make_url
 
 from app.core.config import get_settings
 from app.models import Media
+from tests import media_fixtures
 from tests._db import run_db
 
 
@@ -56,11 +57,13 @@ def _seed(*objects) -> None:
 
 
 def _media(storage_key: str, **kwargs) -> Media:
+    mime_type = kwargs.pop("mime_type", "image/png")
+    media_type = kwargs.pop("media_type", "image" if mime_type.startswith("image/") else "video")
     return Media(
         original_name=kwargs.pop("original_name", "photo.png"),
         storage_key=storage_key,
-        public_url=f"/media/{storage_key}",
-        mime_type=kwargs.pop("mime_type", "image/png"),
+        mime_type=mime_type,
+        media_type=media_type,
         size=kwargs.pop("size", 1024),
         **kwargs,
     )
@@ -78,7 +81,9 @@ def _user_id(email: str) -> str:
     return str(rows[0]["id"])
 
 
-def _upload(client, filename="photo.png", content=b"fake-png-bytes", mime="image/png", **form):
+def _upload(client, filename="photo.png", content=None, mime="image/png", **form):
+    if content is None:
+        content = media_fixtures.PNG
     files = {"file": (filename, content, mime)}
     return client.post("/api/v1/admin/files", files=files, data=form)
 
@@ -95,7 +100,7 @@ def test_upload_png_with_metadata(client) -> None:
     response = _upload(
         client,
         filename="hero-banner.png",
-        content=b"png-bytes",
+        content=media_fixtures.PNG,
         mime="image/png",
         folder="projects",
         alt_text="Hero banner",
@@ -104,45 +109,65 @@ def test_upload_png_with_metadata(client) -> None:
     body = response.json()
     assert body["original_name"] == "hero-banner.png"
     assert body["mime_type"] == "image/png"
-    assert body["size"] == len(b"png-bytes")
+    assert body["media_type"] == "image"
+    assert body["size"] == len(media_fixtures.PNG)
     assert body["folder"] == "projects"
     assert body["alt_text"] == "Hero banner"
+    assert body["width"] == 16
+    assert body["height"] == 9
+    assert body["duration_seconds"] is None
     assert body["storage_key"].endswith(".png")
     assert body["storage_key"].count(".") == 1
     assert body["public_url"] == f"/media/{body['storage_key']}"
+    assert body["url"] == body["public_url"]
     assert body["uploaded_by"] == _user_id("staff@example.com")
-    assert body["width"] is None
-    assert body["height"] is None
 
     assert (MEDIA_ROOT / body["storage_key"]).is_file()
-    assert (MEDIA_ROOT / body["storage_key"]).read_bytes() == b"png-bytes"
+    assert (MEDIA_ROOT / body["storage_key"]).read_bytes() == media_fixtures.PNG
 
 
 def test_upload_minimal(client) -> None:
     _login(client, "staff@example.com", "staff")
-    response = _upload(client, filename="logo.jpg", content=b"jpeg", mime="image/jpeg")
+    response = _upload(client, filename="logo.jpg", content=media_fixtures.JPEG, mime="image/jpeg")
     assert response.status_code == 201
     body = response.json()
     assert body["folder"] is None
     assert body["alt_text"] is None
+    assert body["media_type"] == "image"
     assert body["storage_key"].endswith(".jpg")
+
+
+def test_upload_valid_video(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    response = _upload(client, filename="demo.mp4", content=media_fixtures.MP4, mime="video/mp4")
+    assert response.status_code == 201
+    body = response.json()
+    assert body["media_type"] == "video"
+    assert body["storage_key"].endswith(".mp4")
+    assert body["duration_seconds"] is None
+    assert body["width"] is None
+    assert body["height"] is None
+
+
+def test_upload_valid_pdf(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    response = _upload(
+        client, filename="brochure.pdf", content=media_fixtures.PDF, mime="application/pdf"
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["media_type"] == "document"
+    assert body["storage_key"].endswith(".pdf")
 
 
 def test_upload_original_name_sanitized(client) -> None:
     _login(client, "staff@example.com", "staff")
-    response = _upload(client, filename="../../etc/passwd.png", content=b"x", mime="image/png")
+    response = _upload(client, filename="../../etc/passwd.png")
     assert response.status_code == 201
     body = response.json()
     assert body["original_name"] == "passwd.png"
     assert "/" not in body["storage_key"]
     assert ".." not in body["storage_key"]
-
-
-def test_upload_pdf(client) -> None:
-    _login(client, "staff@example.com", "staff")
-    response = _upload(client, filename="brochure.pdf", content=b"%PDF-1.4", mime="application/pdf")
-    assert response.status_code == 201
-    assert response.json()["storage_key"].endswith(".pdf")
 
 
 # --------------------------------------------------------------------------- #
@@ -151,6 +176,13 @@ def test_upload_pdf(client) -> None:
 def test_upload_unsupported_mime_422(client) -> None:
     _login(client, "staff@example.com", "staff")
     response = _upload(client, filename="virus.exe", content=b"MZ", mime="application/x-msdownload")
+    assert response.status_code == 422
+
+
+def test_upload_svg_rejected_422(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    response = _upload(client, filename="evil.svg", content=svg, mime="image/svg+xml")
     assert response.status_code == 422
 
 
@@ -182,6 +214,39 @@ def test_upload_invalid_folder_422(client) -> None:
 def test_upload_long_alt_text_422(client) -> None:
     _login(client, "staff@example.com", "staff")
     response = _upload(client, alt_text="x" * 501)
+    assert response.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# Content signature validation (MIME spoofing)
+# --------------------------------------------------------------------------- #
+def test_upload_png_declared_as_jpeg_422(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    response = _upload(client, filename="fake.jpg", content=media_fixtures.PNG, mime="image/jpeg")
+    assert response.status_code == 422
+
+
+def test_upload_text_as_image_422(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    response = _upload(client, filename="not.png", content=b"not-an-image", mime="image/png")
+    assert response.status_code == 422
+
+
+def test_upload_image_as_video_422(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    response = _upload(client, filename="fake.mp4", content=media_fixtures.PNG, mime="video/mp4")
+    assert response.status_code == 422
+
+
+def test_upload_garbage_video_422(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    response = _upload(client, filename="fake.webm", content=b"junk", mime="video/webm")
+    assert response.status_code == 422
+
+
+def test_upload_fake_pdf_422(client) -> None:
+    _login(client, "staff@example.com", "staff")
+    response = _upload(client, filename="fake.pdf", content=b"not a pdf", mime="application/pdf")
     assert response.status_code == 422
 
 
@@ -230,6 +295,7 @@ def test_list_and_detail(client) -> None:
     assert by_name["Banner"]["folder"] == "projects"
     assert by_name["Banner"]["alt_text"] == "A banner"
     assert by_name["Logo"]["storage_key"] == "def.png"
+    assert by_name["Banner"]["media_type"] == "image"
 
     detail = client.get(f"/api/v1/admin/files/{_media_id('abc.png')}").json()
     assert detail["original_name"] == "Banner"
@@ -332,6 +398,24 @@ def test_list_filter_by_folder_and_mime(client) -> None:
     assert [i["original_name"] for i in by_mime["items"]] == ["C"]
 
 
+def test_list_filter_by_media_type(client) -> None:
+    _seed(
+        _media("img.png", original_name="Image"),
+        Media(
+            original_name="Video",
+            storage_key="v.mp4",
+            mime_type="video/mp4",
+            media_type="video",
+            size=100,
+        ),
+    )
+    _login(client, "staff@example.com", "staff")
+    images = client.get("/api/v1/admin/files", params={"media_type": "image"}).json()
+    assert [i["original_name"] for i in images["items"]] == ["Image"]
+    videos = client.get("/api/v1/admin/files", params={"media_type": "video"}).json()
+    assert [i["original_name"] for i in videos["items"]] == ["Video"]
+
+
 def test_list_search(client) -> None:
     _seed(
         _media("a.png", original_name="Hero Banner"),
@@ -375,7 +459,7 @@ def test_list_sort_by_size_and_order(client) -> None:
 # --------------------------------------------------------------------------- #
 def test_uploaded_file_served_from_public_url(client) -> None:
     _login(client, "staff@example.com", "staff")
-    body = _upload(client, filename="served.png", content=b"serve-me", mime="image/png").json()
+    body = _upload(client, filename="served.png", content=media_fixtures.PNG).json()
     response = client.get(body["public_url"])
     assert response.status_code == 200
-    assert response.content == b"serve-me"
+    assert response.content == media_fixtures.PNG

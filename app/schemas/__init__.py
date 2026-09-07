@@ -36,7 +36,7 @@ from app.schemas.cms import (
     SolutionPublic,
     SolutionUpdate,
 )
-from app.schemas.files import MediaAdmin, MediaMetadataUpdate
+from app.schemas.files import MediaAdmin, MediaMetadataUpdate, MediaPublic
 from app.schemas.leads import LeadAdmin, LeadCreate, LeadPublicResponse, LeadUpdate
 from app.schemas.team import (
     TeamMemberAdmin,
@@ -58,6 +58,7 @@ __all__ = [
     "LoginRequest",
     "MediaAdmin",
     "MediaMetadataUpdate",
+    "MediaPublic",
     "PaginatedResponse",
     "ProjectAdmin",
     "ProjectCategoryAdmin",

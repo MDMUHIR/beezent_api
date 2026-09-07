@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.models.enums import DemoVideoType, ProjectStatus
+from app.schemas.files import MediaPublic
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -175,9 +176,11 @@ class ProjectBase(BaseModel):
     featured: bool = False
     published: bool = False
     cover_image: str | None = Field(default=None, max_length=500)
+    cover_media_id: UUID | None = None
     live_url: str | None = Field(default=None, max_length=500)
     github_url: str | None = Field(default=None, max_length=500)
     demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_media_id: UUID | None = None
     demo_video_type: DemoVideoType | None = None
     technologies: list[Any] = Field(default_factory=list)
     results: list[Any] = Field(default_factory=list)
@@ -197,9 +200,11 @@ class ProjectPublic(BaseModel):
     status: ProjectStatus
     featured: bool
     cover_image: str | None = None
+    cover_media: MediaPublic | None = None
     live_url: str | None = None
     github_url: str | None = None
     demo_video_url: str | None = None
+    demo_video: MediaPublic | None = None
     demo_video_type: DemoVideoType | None = None
     technologies: list[Any] = Field(default_factory=list)
     results: list[Any] = Field(default_factory=list)
@@ -224,11 +229,13 @@ class ProjectUpdate(BaseModel):
     featured: bool | None = None
     published: bool | None = None
     cover_image: str | None = Field(default=None, max_length=500)
+    cover_media_id: UUID | None = None
     live_url: str | None = Field(default=None, max_length=500)
     github_url: str | None = Field(default=None, max_length=500)
     technologies: list[Any] | None = None
     results: list[Any] | None = None
     demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_media_id: UUID | None = None
     demo_video_type: DemoVideoType | None = None
     category_ids: list[UUID] | None = None
 
@@ -239,6 +246,8 @@ class ProjectAdmin(ProjectBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    cover_media: MediaPublic | None = None
+    demo_video: MediaPublic | None = None
     categories: list[ProjectCategoryRef] = Field(default_factory=list)
 
 
@@ -300,28 +309,38 @@ class ServiceAdmin(ServiceBase):
 class SolutionPublic(ServicePublic):
     categories: list[SolutionCategoryRef] = Field(default_factory=list)
     image_url: str | None = None
+    image_media: MediaPublic | None = None
     demo_video_url: str | None = None
+    demo_video: MediaPublic | None = None
     demo_video_type: DemoVideoType | None = None
 
 
 class SolutionCreate(ServiceBase):
     category_ids: list[UUID] | None = None
     image_url: str | None = Field(default=None, max_length=500)
+    image_media_id: UUID | None = None
     demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_media_id: UUID | None = None
     demo_video_type: DemoVideoType | None = None
 
 
 class SolutionUpdate(ServiceUpdate):
     category_ids: list[UUID] | None = None
     image_url: str | None = Field(default=None, max_length=500)
+    image_media_id: UUID | None = None
     demo_video_url: str | None = Field(default=None, max_length=500)
+    demo_video_media_id: UUID | None = None
     demo_video_type: DemoVideoType | None = None
 
 
 class SolutionAdmin(ServiceAdmin):
     categories: list[SolutionCategoryRef] = Field(default_factory=list)
     image_url: str | None = None
+    image_media_id: UUID | None = None
+    image_media: MediaPublic | None = None
     demo_video_url: str | None = None
+    demo_video_media_id: UUID | None = None
+    demo_video: MediaPublic | None = None
     demo_video_type: DemoVideoType | None = None
 
 
@@ -334,6 +353,7 @@ class CaseStudyBase(BaseModel):
     slug: SlugStr = Field(min_length=1, max_length=255)
     summary: str | None = None
     image_url: str | None = Field(default=None, max_length=500)
+    image_media_id: UUID | None = None
     challenge: str | None = None
     solution: str | None = None
     implementation: str | None = None
@@ -355,6 +375,7 @@ class CaseStudyPublic(BaseModel):
     slug: str
     summary: str | None = None
     image_url: str | None = None
+    image_media: MediaPublic | None = None
     challenge: str | None = None
     solution: str | None = None
     implementation: str | None = None
@@ -378,6 +399,7 @@ class CaseStudyUpdate(BaseModel):
     slug: SlugStr | None = Field(default=None, min_length=1, max_length=255)
     summary: str | None = None
     image_url: str | None = Field(default=None, max_length=500)
+    image_media_id: UUID | None = None
     challenge: str | None = None
     solution: str | None = None
     implementation: str | None = None
@@ -396,6 +418,7 @@ class CaseStudyAdmin(CaseStudyBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    image_media: MediaPublic | None = None
 
 
 SolutionCategoryDetail.model_rebuild()

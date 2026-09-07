@@ -25,8 +25,8 @@ def test_media_can_be_created() -> None:
         media = Media(
             original_name="hero.png",
             storage_key="abc123.png",
-            public_url="/media/abc123.png",
             mime_type="image/png",
+            media_type="image",
             size=2048,
             width=1200,
             height=800,
@@ -42,6 +42,8 @@ def test_media_can_be_created() -> None:
         assert media.size == 2048
         assert media.width == 1200
         assert media.height == 800
+        assert media.media_type == "image"
+        assert media.duration_seconds is None
         assert media.uploaded_by is None
 
     run_db(create)
@@ -52,8 +54,8 @@ def test_media_optional_fields_default_null() -> None:
         media = Media(
             original_name="logo.png",
             storage_key="def456.png",
-            public_url="/media/def456.png",
             mime_type="image/png",
+            media_type="image",
             size=512,
         )
         session.add(media)
@@ -63,6 +65,24 @@ def test_media_optional_fields_default_null() -> None:
         assert media.height is None
         assert media.alt_text is None
         assert media.folder is None
+        assert media.duration_seconds is None
+
+    run_db(create)
+
+
+def test_media_public_url_is_derived_from_storage_key() -> None:
+    async def create(session: AsyncSession) -> None:
+        media = Media(
+            original_name="a.png",
+            storage_key="derived.png",
+            mime_type="image/png",
+            media_type="image",
+            size=1,
+        )
+        session.add(media)
+        await session.commit()
+        await session.refresh(media)
+        assert media.public_url == "/media/derived.png"
 
     run_db(create)
 
@@ -76,8 +96,8 @@ def test_media_uploaded_by_fk_set_null_on_user_delete() -> None:
         media = Media(
             original_name="a.png",
             storage_key="fk1.png",
-            public_url="/media/fk1.png",
             mime_type="image/png",
+            media_type="image",
             size=1,
             uploaded_by=user.id,
         )
@@ -99,15 +119,15 @@ def test_media_storage_key_unique() -> None:
                 Media(
                     original_name="a.png",
                     storage_key="dup.png",
-                    public_url="/media/dup.png",
                     mime_type="image/png",
+                    media_type="image",
                     size=1,
                 ),
                 Media(
                     original_name="b.png",
                     storage_key="dup.png",
-                    public_url="/media/dup.png",
                     mime_type="image/png",
+                    media_type="image",
                     size=1,
                 ),
             ]
@@ -124,9 +144,44 @@ def test_media_size_check_constraint() -> None:
             Media(
                 original_name="a.png",
                 storage_key="neg.png",
-                public_url="/media/neg.png",
                 mime_type="image/png",
+                media_type="image",
                 size=-1,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+    run_db(run)
+
+
+def test_media_media_type_check_constraint() -> None:
+    async def run(session: AsyncSession) -> None:
+        session.add(
+            Media(
+                original_name="a.png",
+                storage_key="bogus.png",
+                mime_type="image/png",
+                media_type="bogus",
+                size=1,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+    run_db(run)
+
+
+def test_media_duration_check_constraint() -> None:
+    async def run(session: AsyncSession) -> None:
+        session.add(
+            Media(
+                original_name="v.mp4",
+                storage_key="neg.mp4",
+                mime_type="video/mp4",
+                media_type="video",
+                size=1,
+                duration_seconds=-1,
             )
         )
         with pytest.raises(IntegrityError):
@@ -137,9 +192,7 @@ def test_media_size_check_constraint() -> None:
 
 def test_media_required_fields_enforced() -> None:
     async def run(session: AsyncSession) -> None:
-        session.add(
-            Media(storage_key="x.png", public_url="/media/x.png", mime_type="image/png", size=1)
-        )
+        session.add(Media(storage_key="x.png", mime_type="image/png", media_type="image", size=1))
         with pytest.raises(IntegrityError):
             await session.commit()
 
@@ -152,7 +205,12 @@ def test_media_indexes_exist() -> None:
             text("SELECT indexname FROM pg_indexes WHERE tablename = 'media'")
         )
         indexes = {row[0] for row in result}
-        assert {"ix_media_created_at", "ix_media_folder", "ix_media_storage_key"} <= indexes
+        assert {
+            "ix_media_created_at",
+            "ix_media_folder",
+            "ix_media_media_type",
+            "ix_media_storage_key",
+        } <= indexes
 
     run_db(run)
 
@@ -174,8 +232,8 @@ def test_alembic_downgrade_and_upgrade_restores_latest_table() -> None:
     try:
         command.downgrade(config, "-1")
         columns_after_downgrade = run_db(_project_columns)
-        assert "demo_video_url" not in columns_after_downgrade
+        assert "cover_media_id" not in columns_after_downgrade
     finally:
         command.upgrade(config, "head")
     columns = run_db(_project_columns)
-    assert "demo_video_url" in columns
+    assert "cover_media_id" in columns

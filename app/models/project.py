@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, Enum, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, Enum, ForeignKey, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +13,7 @@ from app.models.project_category import project_category_links
 
 if TYPE_CHECKING:
     from app.models.case_study import CaseStudy
+    from app.models.media import Media
     from app.models.project_category import ProjectCategory
 
 
@@ -44,9 +46,15 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     featured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     cover_image: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    cover_media_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     live_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     github_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     demo_video_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    demo_video_media_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     demo_video_type: Mapped[DemoVideoType | None] = mapped_column(
         Enum(
             DemoVideoType,
@@ -64,6 +72,16 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     case_studies: Mapped[list[CaseStudy]] = relationship(back_populates="project")
+
+    cover_media: Mapped[Media | None] = relationship(foreign_keys=[cover_media_id], lazy="selectin")
+    demo_video_media: Mapped[Media | None] = relationship(
+        foreign_keys=[demo_video_media_id], lazy="selectin"
+    )
+
+    @property
+    def demo_video(self) -> Media | None:
+        """Alias of :attr:`demo_video_media` (uploaded demo video)."""
+        return self.demo_video_media
 
     categories: Mapped[list[ProjectCategory]] = relationship(
         secondary=project_category_links,

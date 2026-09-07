@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -23,6 +23,7 @@ service_category_links = Table(
         ForeignKey("service_categories.id", ondelete="CASCADE"),
         primary_key=True,
     ),
+    Index("ix_service_category_links_category_id", "category_id"),
 )
 
 
