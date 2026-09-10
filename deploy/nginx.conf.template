@@ -1,0 +1,57 @@
+# Beezents production site configuration (nginx).
+#
+# Generated from deploy/nginx.conf.template by deploy/init-letsencrypt.sh,
+# which replaces the __DOMAIN__ placeholder with the real domain. This file is
+# mounted at /etc/nginx/conf.d/default.conf inside the nginx container.
+
+# Allow uploads up to the API's largest accepted size (videos, 100 MiB by
+# default). nginx's built-in limit is 1 MiB and would reject large uploads
+# with 413 before they reach the API.
+client_max_body_size 105m;
+
+# Large media uploads and long responses need generous proxy timeouts.
+proxy_read_timeout 300s;
+proxy_send_timeout 300s;
+
+server {
+    listen 80;
+    server_name __DOMAIN__;
+
+    # Let's Encrypt HTTP-01 challenge (certificate issuance + renewal).
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Everything else redirects to HTTPS.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name __DOMAIN__;
+    server_tokens off;
+
+    ssl_certificate /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+
+    # Forward the original client connection details so the API sees the
+    # real client IP/Host and knows the request arrived over HTTPS.
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+
+    location / {
+        proxy_pass http://api:8000;
+        proxy_redirect off;
+    }
+}

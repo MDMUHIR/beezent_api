@@ -246,17 +246,13 @@ def test_upload_oversize_413(client) -> None:
 
 def test_upload_spoofed_image_content_422(client) -> None:
     _login(client)
-    response = _project_upload(
-        client, cover_file=("fake.png", b"not-an-image", "image/png")
-    )
+    response = _project_upload(client, cover_file=("fake.png", b"not-an-image", "image/png"))
     assert response.status_code == 422
 
 
 def test_upload_png_declared_as_jpeg_422(client) -> None:
     _login(client)
-    response = _project_upload(
-        client, cover_file=("fake.jpg", media_fixtures.PNG, "image/jpeg")
-    )
+    response = _project_upload(client, cover_file=("fake.jpg", media_fixtures.PNG, "image/jpeg"))
     assert response.status_code == 422
 
 

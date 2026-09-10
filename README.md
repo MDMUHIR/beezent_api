@@ -1047,6 +1047,12 @@ A production-oriented, multi-stage `Dockerfile` builds a minimal
 `python:3.12-slim` runtime image with a non-root user, a health check, and an
 entrypoint that applies migrations before starting Uvicorn.
 
+**Deploying to AWS EC2?** See
+[`docs/aws-ec2-deployment.md`](docs/aws-ec2-deployment.md) for a complete
+step-by-step guide (EC2 + nginx + Let's Encrypt + RDS). It uses
+`docker-compose.prod.yml` and `.env.production.example` (nginx reverse proxy
+with automatic TLS, external/managed PostgreSQL, and EBS-backed media).
+
 ### Local development with docker compose
 
 `docker-compose.yml` runs the API together with a throwaway PostgreSQL 16 for
@@ -1086,6 +1092,16 @@ docker run --rm -p 8000:8000 \
 | `MEDIA_MAX_VIDEO_SIZE_BYTES` | `104857600` | Max video upload size |
 | `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated allowed origins |
 | `TRUSTED_HOSTS` | *(empty)* | Comma-separated allowed Host values |
+
+For production, copy `.env.production.example` to `.env.production`, fill in
+real values (`DATABASE_URL`, `CORS_ALLOWED_ORIGINS`, `TRUSTED_HOSTS`), and
+deploy with `docker-compose.prod.yml`:
+
+```sh
+cp .env.production.example .env.production   # edit with real values
+DOMAIN=api.example.com ./deploy/init-letsencrypt.sh   # TLS bootstrap (first time only)
+docker compose -f docker-compose.prod.yml up -d --build
+```
 
 No secrets are baked into the image; `.env` is excluded via `.dockerignore`.
 The image's `HEALTHCHECK` calls `/health` with stdlib urllib (no `curl`

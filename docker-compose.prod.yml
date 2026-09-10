@@ -1,0 +1,89 @@
+# Beezents backend — production deployment for AWS EC2 (single instance).
+#
+# Topology:
+#   nginx   → TLS termination (Let's Encrypt) + reverse proxy → api
+#   api     → FastAPI app (runs `alembic upgrade head` on startup)
+#   certbot → renews the TLS certificate every 12h
+#
+# PostgreSQL is intentionally NOT part of this stack. Use Amazon RDS
+# (recommended) or any managed PostgreSQL and configure DATABASE_URL in
+# .env.production. For a quick single-host setup you may run a PostgreSQL
+# container instead — see the commented-out `db` service below.
+#
+# Media is stored on the instance's EBS volume through the `media-data`
+# named volume. The nginx container reloads every 6h so renewed certificates
+# are picked up automatically.
+#
+# Usage (first time):
+#   cp .env.production.example .env.production        # edit with real values
+#   DOMAIN=api.example.com ./deploy/init-letsencrypt.sh  # obtains TLS cert
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Update later:
+#   ./deploy/deploy.sh
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Generated from deploy/nginx.conf.template by deploy/init-letsencrypt.sh.
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-conf:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    # Reload nginx periodically so renewed certificates are activated.
+    command: >-
+      /bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done &
+      nginx -g "daemon off;"'
+    depends_on:
+      - api
+
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: >-
+      /bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet;
+      sleep 12h & wait $${!}; done;'
+
+  api:
+    build: .
+    image: beezents-backend:latest
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - media-data:/app/media
+    expose:
+      - "8000"
+
+  # Optional: run PostgreSQL on the instance instead of Amazon RDS.
+  # Change DATABASE_URL in .env.production to point at the `db` host, then
+  # uncomment this service. Not recommended for production — a managed
+  # database (RDS) gives you backups, failover and patching for free.
+  #
+  # db:
+  #   image: postgres:16
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: CHANGE_ME
+  #     POSTGRES_DB: beezents
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres -d beezents"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  media-data:
+  certbot-conf:
+  certbot-www:
+  pgdata:
