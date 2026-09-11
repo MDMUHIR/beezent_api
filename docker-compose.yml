@@ -27,7 +27,12 @@ services:
   api:
     build: .
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/beezents
+      # Database connection is assembled dynamically from DB_* components.
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: beezents
       COOKIE_SECURE: "false"
       SESSION_COOKIE_NAME: beezents_session
       SESSION_MAX_AGE_SECONDS: "604800"

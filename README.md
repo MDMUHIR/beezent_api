@@ -34,15 +34,28 @@ sudo -u postgres createdb beezents
 
 ## Database configuration
 
-`DATABASE_URL` is read from `.env` (see `.env.example`). It must use the async
-PostgreSQL driver:
+Database settings are managed by Pydantic Settings in `app/core/config.py`.
+The connection URL is **assembled dynamically** from the individual `DB_*`
+variables, so each part can be configured (and rotated) independently:
+
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=beezents
+```
+
+If a full DSN is preferred, `DATABASE_URL` overrides the components and is used
+verbatim (it must use the async driver):
 
 ```
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/beezents
 ```
 
-The connection string and other settings are managed by Pydantic Settings in
-`app/core/config.py`. Never hardcode credentials.
+Credentials are never hardcoded in the codebase; both forms are read from the
+environment (`.env` / `.env.production`). Special characters in `DB_USER` /
+`DB_PASSWORD` are URL-encoded automatically.
 
 ## Authentication
 
@@ -68,7 +81,12 @@ ignored in registration/profile input. Roles are assigned by administrators.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | — | Async PostgreSQL connection string |
+| `DATABASE_URL` | *(optional)* | Full async PostgreSQL DSN; overrides the `DB_*` components when set |
+| `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_USER` | `postgres` | PostgreSQL user |
+| `DB_PASSWORD` | `postgres` | PostgreSQL password |
+| `DB_NAME` | `beezents` | PostgreSQL database name |
 | `SESSION_COOKIE_NAME` | `beezents_session` | HTTP-only session cookie name |
 | `SESSION_MAX_AGE_SECONDS` | `604800` | Session lifetime (7 days) |
 | `COOKIE_SECURE` | `false` | Set to `true` in production (HTTPS only) |
@@ -1080,7 +1098,8 @@ docker run --rm -p 8000:8000 \
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | *(required)* | Async PostgreSQL DSN (`postgresql+asyncpg://…`) |
+| `DATABASE_URL` | *(optional)* | Full async PostgreSQL DSN (`postgresql+asyncpg://…`); overrides `DB_*` when set |
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | `localhost` / `5432` / `postgres` / `postgres` / `beezents` | Database components used to build the DSN dynamically |
 | `UVICORN_WORKERS` | `1` | Uvicorn worker count |
 | `SKIP_MIGRATIONS` | `0` | Set `1` to skip auto-migrations (e.g. when a separate job runs them) |
 | `SESSION_COOKIE_NAME` | `beezents_session` | Session cookie name |

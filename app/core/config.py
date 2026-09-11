@@ -1,5 +1,7 @@
 from functools import lru_cache
+from urllib.parse import quote
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +17,18 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
 
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/beezents"
+    # PostgreSQL connection.
+    #
+    # The database URL is assembled dynamically from the individual DB_*
+    # components below (so each part can be configured/rotated independently,
+    # e.g. from AWS RDS or a secrets manager). If DATABASE_URL is provided it
+    # takes precedence and the URL is used verbatim.
+    database_url: str = ""
+    db_host: str = "localhost"
+    db_port: int = 5432
+    db_user: str = "postgres"
+    db_password: str = "postgres"
+    db_name: str = "beezents"
 
     session_cookie_name: str = "beezents_session"
     session_max_age_seconds: int = 7 * 24 * 60 * 60
@@ -49,6 +62,21 @@ class Settings(BaseSettings):
     seed_admin_password: str = ""
     seed_admin_full_name: str = "Default Admin"
     seed_admin_role: str = "admin"
+
+    @model_validator(mode="after")
+    def build_database_url(self) -> "Settings":
+        """Assemble `database_url` from the DB_* components when not set.
+
+        User/password are URL-encoded so special characters in credentials
+        (common with RDS-generated passwords) never corrupt the DSN.
+        """
+        if not self.database_url:
+            self.database_url = (
+                f"postgresql+asyncpg://{quote(self.db_user, safe='')}:"
+                f"{quote(self.db_password, safe='')}@"
+                f"{self.db_host}:{self.db_port}/{self.db_name}"
+            )
+        return self
 
 
 @lru_cache

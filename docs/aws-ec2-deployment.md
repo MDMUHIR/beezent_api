@@ -76,8 +76,18 @@ nano .env.production
 
 Edit `.env.production`:
 
-- `DATABASE_URL` — your RDS (or other PostgreSQL) DSN:
-  `postgresql+asyncpg://<user>:<password>@<rds-endpoint>:5432/beezents`
+- `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` — the RDS (or
+  other PostgreSQL) connection details, e.g.:
+  ```
+  DB_HOST=beezents-db.CLUSTER.ap-southeast-1.rds.amazonaws.com
+  DB_PORT=5432
+  DB_USER=beezents
+  DB_PASSWORD=<your-password>
+  DB_NAME=beezents
+  ```
+  The async DSN (`postgresql+asyncpg://…`) is assembled automatically from
+  these components, and special characters in the password are URL-encoded.
+  Alternatively, set `DATABASE_URL` to a full DSN — it takes precedence.
   (The database itself must already exist; RDS creates the DB you name at
   creation time. The entrypoint only applies migrations.)
 - `CORS_ALLOWED_ORIGINS` — the origins of your Next.js frontend, e.g.
